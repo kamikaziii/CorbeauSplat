@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit, QFileDialog, QMessageBox
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit, QMessageBox
 )
 from PyQt6.QtGui import QFont
 from app.core.i18n import tr, add_language_observer

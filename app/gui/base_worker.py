@@ -6,6 +6,7 @@ class BaseWorker(QThread):
     """Classe de base pour les workers avec signaux standardisés"""
     log_signal = pyqtSignal(str)
     progress_signal = pyqtSignal(int)
+    status_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(bool, str)
     
     def __init__(self):
@@ -68,4 +69,3 @@ class BaseWorker(QThread):
 
     def parse_line(self, line):
         """A surcharger pour extraire la progression ou des infos spécifiques"""
-        pass

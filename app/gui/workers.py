@@ -1,9 +1,7 @@
 import os
 import shutil
 import re
-import shlex
 from pathlib import Path
-from PyQt6.QtCore import pyqtSignal
 from app.core.engine import ColmapEngine
 from app.core.brush_engine import BrushEngine
 from app.gui.base_worker import BaseWorker
@@ -64,6 +62,7 @@ class ColmapWorker(BaseWorker):
             params, input_path, output_path, input_type, fps, project_name,
             logger_callback=self.log_signal.emit,
             progress_callback=self.progress_signal.emit,
+            status_callback=self.status_signal.emit,
             check_cancel_callback=self.isInterruptionRequested
         )
         
@@ -416,6 +415,8 @@ class SharpWorker(BaseWorker):
                     self.log_signal.emit("Erreur: Upscale demandé mais non installé.")
             
             # Use refactored predict method
+            from app.core.i18n import tr
+            self.status_signal.emit(tr("status_sharp", "Amélioration avec ML Sharp..."))
             process = self.engine.predict(self.input_path, self.output_path, self.params)
             
             success = True
@@ -430,6 +431,12 @@ class SharpWorker(BaseWorker):
                     clean_line = line.strip()
                     if clean_line:
                         self.log_signal.emit(clean_line)
+                        if "%" in clean_line:
+                            try:
+                                import re
+                                match = re.search(r'\[\s*(\d+)%\]', clean_line)
+                                if match: self.progress_signal.emit(int(match.group(1)))
+                            except: pass
                 
                 process.wait()
                 if process.returncode != 0:
@@ -457,7 +464,10 @@ class FourDGSWorker(BaseWorker):
 
     def run(self):
         self.log_signal.emit("--- Démarrage 4DGS ---")
-        self.engine = FourDGSEngine(logger_callback=self.log_signal.emit)
+        self.engine = FourDGSEngine(
+            logger_callback=self.log_signal.emit,
+            status_callback=self.status_signal.emit
+        )
         
         # 4DGS process is more complex, but we can still use run_subprocess for its internal steps if needed.
         # For now, keep it calling engine.process_dataset but ensure engine doesn't block if we can.

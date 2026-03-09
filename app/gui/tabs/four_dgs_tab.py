@@ -3,14 +3,13 @@ from pathlib import Path
 import sys
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QGroupBox,
-    QFormLayout, QCheckBox, QSpinBox, QMessageBox, QFileDialog, QTextEdit, QProgressBar, QApplication, QProgressDialog
+    QFormLayout, QCheckBox, QSpinBox, QMessageBox, QTextEdit, QApplication, QProgressDialog
 )
-from PyQt6.QtCore import pyqtSignal, Qt, QThread
+from PyQt6.QtCore import Qt
 from app.core.i18n import tr, add_language_observer
 from app.gui.widgets.drop_line_edit import DropLineEdit
 from app.gui.widgets.dialog_utils import get_existing_directory
 from app.gui.workers import FourDGSWorker
-from app.core.system import resolve_binary
 
 class FourDGSTab(QWidget):
     """

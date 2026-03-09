@@ -1,15 +1,13 @@
 import os
 import sys
 import json
-import shutil
-import send2trash
 from pathlib import Path
-from app.core.system import resolve_project_root, resolve_binary
+from app.core.system import resolve_project_root
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QTabWidget, QMessageBox, QFileDialog, QApplication, QLabel, QProgressDialog
+    QMainWindow, QWidget, QVBoxLayout, QTabWidget, QMessageBox, QFileDialog, QApplication, QLabel
 )
 from PyQt6.QtGui import QColor
-from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtCore import Qt
 from app.core.params import ColmapParams
 from app.core.engine import ColmapEngine
 from app.core.i18n import tr, add_language_observer
@@ -178,55 +176,90 @@ class ColmapGUI(QMainWindow):
         return params
         
     def process(self):
-        """Lance le traitement"""
+        """Lance le traitement en fonction du mode sélectionné"""
         input_path = self.config_tab.get_input_path()
         output_path = self.config_tab.get_output_path()
         
         if not input_path or not output_path:
-            QMessageBox.critical(self, tr("msg_error"), 
-                               tr("err_no_paths"))
+            QMessageBox.critical(self, tr("msg_error"), tr("err_no_paths"))
             return
             
+        mode = self.config_tab.get_training_mode()
         self.config_tab.set_processing_state(True)
         self.logs_tab.clear_log()
-        self.logs_tab.append_log(tr("msg_processing"))
         
-        input_type = self.config_tab.get_input_type()
-        project_name = self.config_tab.get_project_name()
-        
-        self.worker = ColmapWorker(
-            self.get_current_params(),
-            input_path,
-            output_path,
-            input_type,
-            self.config_tab.get_fps(),
-            project_name,
-            upscale_params=self.config_tab.get_upscale_config(
-                self.upscale_tab.get_params()
-            ),
-            extractor_360_params=self.get_extractor_360_config()
-        )
-        
-        self.worker.log_signal.connect(self.logs_tab.append_log)
-        # Pour simplifier, on n'a pas de progress bar globale ici car elle était dans le layout principal avant.
-        # On pourrait l'ajouter dans ConfigTab ou en bas de MainWindow. 
-        # Pour l'instant, on laisse le log parler.
-        self.worker.finished_signal.connect(self.on_finished)
-        
-        self.worker.start()
+        if mode == "gsplat":
+            self.logs_tab.append_log(tr("msg_processing") + " (Gsplat)")
+            self.worker = ColmapWorker(
+                self.get_current_params(),
+                input_path, output_path, self.config_tab.get_input_type(),
+                self.config_tab.get_fps(),
+                self.config_tab.get_project_name(),
+                extractor_360_params=None # Disabled
+            )
+            self.worker.log_signal.connect(self.logs_tab.append_log)
+            self.worker.progress_signal.connect(self.config_tab.progress_bar.setValue)
+            self.worker.status_signal.connect(self.config_tab.lbl_status.setText)
+            self.worker.finished_signal.connect(self.on_finished)
+            self.worker.start()
+            
+        elif mode == "sharp":
+            self.logs_tab.append_log(tr("msg_processing") + " (ML Sharp)")
+            self.sharp_worker = SharpWorker(input_path, output_path, self.sharp_tab.get_params())
+            self.sharp_worker.log_signal.connect(self.logs_tab.append_log)
+            self.sharp_worker.progress_signal.connect(self.config_tab.progress_bar.setValue)
+            self.sharp_worker.status_signal.connect(self.config_tab.lbl_status.setText)
+            self.sharp_worker.finished_signal.connect(self.on_sharp_finished)
+            self.sharp_worker.start()
+            
+        elif mode == "360":
+            self.logs_tab.append_log(tr("msg_processing") + " (360 Extractor)")
+            ext_params = self.extractor_360_tab.get_params()
+            ext_params["enabled"] = True
+            
+            self.worker = ColmapWorker(
+                self.get_current_params(),
+                input_path, output_path, "video",
+                self.config_tab.get_fps(),
+                self.config_tab.get_project_name(),
+                extractor_360_params=ext_params
+            )
+            self.worker.log_signal.connect(self.logs_tab.append_log)
+            self.worker.progress_signal.connect(self.config_tab.progress_bar.setValue)
+            self.worker.status_signal.connect(self.config_tab.lbl_status.setText)
+            self.worker.finished_signal.connect(self.on_finished)
+            self.worker.start()
+            
+        elif mode == "4dgs":
+            self.logs_tab.append_log(tr("msg_processing") + " (4DGS)")
+            
+            # Need to import FourDGSWorker if not already done. It is imported at line 27.
+            from app.gui.workers import FourDGSWorker
+            self.fourdgs_worker = FourDGSWorker(input_path, output_path, self.config_tab.get_fps())
+            self.fourdgs_worker.log_signal.connect(self.logs_tab.append_log)
+            self.fourdgs_worker.progress_signal.connect(self.config_tab.progress_bar.setValue)
+            self.fourdgs_worker.status_signal.connect(self.config_tab.lbl_status.setText)
+            self.fourdgs_worker.finished_signal.connect(self.on_finished)
+            self.fourdgs_worker.start()
+            
+        # self.tabs.setCurrentWidget(self.logs_tab)
         
     def stop_process(self):
         """Arrête le processus en cours"""
-        if self.worker and self.worker.isRunning():
+        if (self.worker and self.worker.isRunning()) or \
+           (self.sharp_worker and self.sharp_worker.isRunning()) or \
+           (hasattr(self, 'fourdgs_worker') and self.fourdgs_worker and self.fourdgs_worker.isRunning()):
+            
             reply = QMessageBox.question(
-                self, tr("msg_warning"),
-                tr("confirm_stop"),
+                self, tr("msg_warning"), tr("confirm_stop"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             
             if reply == QMessageBox.StandardButton.Yes:
                 self.logs_tab.append_log(tr("msg_stopping"))
-                self.worker.stop()
+                if self.worker and self.worker.isRunning(): self.worker.stop()
+                if self.sharp_worker and self.sharp_worker.isRunning(): self.sharp_worker.stop()
+                if hasattr(self, 'fourdgs_worker') and self.fourdgs_worker and self.fourdgs_worker.isRunning(): self.fourdgs_worker.stop()
         
     def on_finished(self, success, message):
         """Fin du traitement"""

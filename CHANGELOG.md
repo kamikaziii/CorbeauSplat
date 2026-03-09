@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8] - 2026-03-10
+
+### ✨ New Features & Languages
+-   **Multi-language Expansion**: Added full localization for **Arabic (AR)**, **Russian (RU)**, **Chinese (ZH)**, and **Japanese (JA)**.
+-   **Training Mode Selector**: Refactored the "Entraînement" tab to use a dropdown for Training Mode (Gsplat, ML Sharp, 360 Extractor, 4DGS) instead of generic radio buttons, adapting the UI dynamically for each mode.
+-   **GSplat Source Type**: Re-added an explicit "Images / Video" selector specifically when Gsplat mode is chosen, to correctly inform the underlying pipeline.
+
+### 🛠 Improvements
+-   **UI Cleanup**: Removed outdated source checkboxes in favor of the unified mode selector.
+-   **Localization UI**: Displayed languages in their own native scripts in the language selector.
+
 ## [0.75] - 2026-03-03
 
 ### 🛠 Bug Fixes (Critical)

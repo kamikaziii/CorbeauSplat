@@ -1,11 +1,9 @@
-import os
-import shutil
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit,
     QGroupBox, QFormLayout, QSpinBox, QCheckBox, QComboBox, QDoubleSpinBox, 
-    QFileDialog, QScrollArea, QFrame
+    QScrollArea, QFrame, QMessageBox
 )
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal
 from app.core.i18n import tr, add_language_observer
 from app.core.system import resolve_binary
 from app.gui.widgets.drop_line_edit import DropLineEdit
@@ -39,6 +37,13 @@ class BrushTab(QWidget):
             self.status_lbl.setText(tr("brush_not_found"))
             self.status_lbl.setStyleSheet("color: #aa4444; font-weight: bold;")
         status_layout.addWidget(self.status_lbl)
+        
+        self.btn_reinstall_brush = QPushButton(tr("btn_reinstall_brush"))
+        self.btn_reinstall_brush.clicked.connect(self.on_reinstall_clicked)
+        
+        status_layout.addStretch()
+        status_layout.addWidget(self.btn_reinstall_brush)
+        
         main_layout.addLayout(status_layout)
         
         # 2. Zone de défilement pour les paramètres
@@ -118,7 +123,7 @@ class BrushTab(QWidget):
         layout.addWidget(self.check_independent)
         
         # 2. Training Mode 
-        mode_layout = QHBoxLayout()
+        QHBoxLayout()
         # mode_layout.addWidget(QLabel(tr("brush_lbl_mode")))
         # Use Form Layout style for alignment? Or just clean VBox for this section
         # Let's use a FormLayout for Mode & Preset to align labels nicely
@@ -378,6 +383,7 @@ class BrushTab(QWidget):
             "max_resolution": self.max_resolution_spin.value(),
             "with_viewer": self.check_viewer.isChecked(),
             "independent": self.check_independent.isChecked(),
+            "independent": self.check_independent.isChecked(),
             "input_path": self.input_path.text(),
             "show_details": self.check_details.isChecked()
         }
@@ -440,6 +446,8 @@ class BrushTab(QWidget):
         self.check_viewer.setText(tr("brush_viewer"))
         self.check_independent.setText(tr("check_brush_independent"))
         
+        self.btn_reinstall_brush.setText(tr("btn_reinstall_brush"))
+        
         # ComboBoxes
         self.combo_mode.setItemText(0, tr("brush_mode_new"))
         self.combo_mode.setItemText(1, tr("brush_mode_refine"))
@@ -474,3 +482,31 @@ class BrushTab(QWidget):
         
     def set_state(self, state):
         self.set_params(state)
+
+    def on_reinstall_clicked(self):
+        reply = QMessageBox.question(
+            self,
+            tr("btn_reinstall_brush"),
+            tr("brush_reinstall_confirm"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            from app.core.system import resolve_project_root
+            root = resolve_project_root()
+            brush_bin = root / "engines" / "brush"
+            brush_version = root / "engines" / "brush.version"
+            
+            try:
+                if brush_bin.exists():
+                    brush_bin.unlink()
+                if brush_version.exists():
+                    brush_version.unlink()
+                    
+                QMessageBox.information(
+                    self,
+                    tr("btn_reinstall_brush"),
+                    tr("brush_reinstall_info")
+                )
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Erreur lors de la suppression de Brush: {e}")

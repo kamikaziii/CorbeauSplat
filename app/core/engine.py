@@ -1,14 +1,12 @@
 import os
 import shutil
-import concurrent.futures
 import send2trash
 import platform
 import json
 import subprocess
 from pathlib import Path
 from .base_engine import BaseEngine
-from .params import ColmapParams
-from .system import is_apple_silicon, get_optimal_threads, resolve_binary, get_device
+from .system import is_apple_silicon, get_optimal_threads, resolve_binary
 from .i18n import tr
 
 _IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
@@ -16,7 +14,7 @@ _IMAGE_EXTS = {'.jpg', '.jpeg', '.png'}
 class ColmapEngine(BaseEngine):
     """Moteur d'exécution COLMAP indépendant de l'interface graphique"""
     
-    def __init__(self, params, input_path, output_path, input_type, fps, project_name="Untitled", logger_callback=None, progress_callback=None, check_cancel_callback=None):
+    def __init__(self, params, input_path, output_path, input_type, fps, project_name="Untitled", logger_callback=None, progress_callback=None, status_callback=None, check_cancel_callback=None):
         super().__init__("COLMAP", logger_callback)
         self.params = params
         self.input_path = Path(input_path)
@@ -28,6 +26,7 @@ class ColmapEngine(BaseEngine):
         self.num_threads = get_optimal_threads()
         self._current_process = None
         self.progress = progress_callback if progress_callback else lambda x: None
+        self.status = status_callback if status_callback else lambda x: None
         self.check_cancel = check_cancel_callback if check_cancel_callback else lambda: False
         
         # Resolve binaries
@@ -35,6 +34,14 @@ class ColmapEngine(BaseEngine):
         self.colmap_bin = resolve_binary('colmap') or 'colmap'
         self.glomap_bin = resolve_binary('glomap') or 'glomap'
         
+        # Pre-load cv2 on the main thread to avoid Bus Error (SIGBUS) 
+        # caused by numpy's Apple Accelerate framework initializing in a sub-thread
+        try:
+            import cv2
+            self._cv2_loaded = True
+        except ImportError:
+            self._cv2_loaded = False
+            
         if self.is_silicon:
             self.log(f"Apple Silicon détecté - {self.num_threads} threads optimisés")
         self.log(f"Binaires: {self.colmap_bin}, {self.ffmpeg_bin}, {self.glomap_bin}")
@@ -73,12 +80,14 @@ class ColmapEngine(BaseEngine):
                  return False, f"Vidéo introuvable: {self.input_path}"
 
             # 1. Preparation des Images (Extraction ou Copie)
+            self.status(tr("status_prep_images", "Préparation des images..."))
             if not self._prepare_images(images_dir):
                 return False, "Echec preparation images"
             
             # --- UPSCALE STEP ---
             upscale_conf = getattr(self, 'upscale_config', None)
             if upscale_conf and upscale_conf.get("active", False):
+                self.status(tr("status_upscaling", "Upscaling des images..."))
                 if not self._run_upscale(project_dir, images_dir):
                     return False, "Echec Upscale"
 
@@ -97,7 +106,8 @@ class ColmapEngine(BaseEngine):
             
             # 1. Feature Extraction
             if self.is_cancelled(): return False, tr("USER_CANCELLED")
-                
+            
+            self.status(tr("status_feature_extraction", "Extraction des features (COLMAP)..."))    
             if not self.feature_extraction(str(database_path), str(images_dir)):
                 if self.is_cancelled(): return False, tr("USER_CANCELLED")
                 return False, "Échec extraction features"
@@ -106,7 +116,8 @@ class ColmapEngine(BaseEngine):
             
             # 2. Feature Matching
             if self.is_cancelled(): return False, tr("USER_CANCELLED")
-                
+            
+            self.status(tr("status_feature_matching", "Matching des features..."))
             if not self.feature_matching(str(database_path)):
                 if self.is_cancelled(): return False, tr("USER_CANCELLED")
                 return False, "Échec matching"
@@ -115,7 +126,8 @@ class ColmapEngine(BaseEngine):
             
             # 3. Reconstruction
             if self.is_cancelled(): return False, tr("USER_CANCELLED")
-                
+            
+            self.status(tr("status_reconstruction", "Reconstruction 3D (Mapper)..."))
             if not self.mapper(str(database_path), str(images_dir), str(sparse_dir)):
                 if self.is_cancelled(): return False, tr("USER_CANCELLED")
                 return False, "Échec reconstruction"
@@ -129,6 +141,7 @@ class ColmapEngine(BaseEngine):
                 dense_dir = project_dir / "dense"
                 dense_dir.mkdir(exist_ok=True)
                 
+                self.status(tr("status_undistorting", "Undistortion des images..."))
                 if not self.image_undistorter(str(images_dir), str(sparse_dir), str(dense_dir)):
                     if self.is_cancelled(): return False, "Arrete par l'utilisateur"
                     return False, "Echec undistortion"
@@ -137,6 +150,7 @@ class ColmapEngine(BaseEngine):
             
             # Configuration Brush
             if not self.is_cancelled():
+                self.status(tr("status_ready", "Traitement terminé !"))
                 self.create_brush_config(project_dir, images_dir, sparse_dir)
                 self.progress(100)
                 return True, f"Dataset cree: {project_dir}"
@@ -282,11 +296,11 @@ class ColmapEngine(BaseEngine):
         """
         self.log(f"\n{'='*60}\nVérification résolution images\n{'='*60}")
 
-        try:
-            import cv2
-        except ImportError:
+        if not getattr(self, '_cv2_loaded', False):
             self.log("⚠️ OpenCV non disponible — vérification résolution ignorée.")
             return True
+            
+        import cv2
 
         files = sorted([
             f for f in images_dir.iterdir()

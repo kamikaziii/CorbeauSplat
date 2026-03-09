@@ -1,14 +1,12 @@
-import os
-from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit,
-    QGroupBox, QRadioButton, QSpinBox, QCheckBox, QFileDialog, QMessageBox, QComboBox
+    QGroupBox, QRadioButton, QSpinBox, QCheckBox, QMessageBox, QComboBox,
+    QProgressBar
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from app.core.i18n import tr, set_language, get_current_lang, add_language_observer
 from app.gui.widgets.drop_line_edit import DropLineEdit
 from app.gui.widgets.dialog_utils import get_existing_directory, get_open_file_names
-from app.core.extractor_360_engine import Extractor360Engine
 
 class ConfigTab(QWidget):
     """Onglet de configuration principale"""
@@ -45,6 +43,10 @@ class ConfigTab(QWidget):
         self.combo_lang.addItem("Deutsch", "de")
         self.combo_lang.addItem("Italiano", "it")
         self.combo_lang.addItem("Español", "es")
+        self.combo_lang.addItem("العربية", "ar")
+        self.combo_lang.addItem("Русский", "ru")
+        self.combo_lang.addItem("中文", "zh")
+        self.combo_lang.addItem("日本語", "ja")
         self.combo_lang.setMinimumWidth(100)
         
         # Select current language
@@ -77,17 +79,34 @@ class ConfigTab(QWidget):
         name_layout.addWidget(self.input_project_name)
         input_layout.addLayout(name_layout)
 
-        # Type d'entrée
+        # Mode d'entraînement
+        mode_layout = QHBoxLayout()
+        self.lbl_mode = QLabel(tr("label_training_mode"))
+        mode_layout.addWidget(self.lbl_mode)
+        
+        self.combo_mode = QComboBox()
+        self.combo_mode.addItem(tr("mode_gsplat"), "gsplat")
+        self.combo_mode.addItem(tr("mode_sharp"), "sharp")
+        self.combo_mode.addItem(tr("mode_360"), "360")
+        self.combo_mode.addItem(tr("mode_4dgs"), "4dgs")
+        mode_layout.addWidget(self.combo_mode)
+        mode_layout.addStretch()
+        input_layout.addLayout(mode_layout)
+        
+        # Type d'entrée (images/vidéo) - Actif uniquement pour gsplat
         type_layout = QHBoxLayout()
         self.lbl_type = QLabel(tr("label_type"))
         type_layout.addWidget(self.lbl_type)
+        
         self.radio_images = QRadioButton(tr("radio_images"))
-        self.radio_video = QRadioButton(tr("radio_video"))
         self.radio_images.setChecked(True)
         type_layout.addWidget(self.radio_images)
+        
+        self.radio_video = QRadioButton(tr("radio_video"))
         type_layout.addWidget(self.radio_video)
         type_layout.addStretch()
         input_layout.addLayout(type_layout)
+        self.radio_images.toggled.connect(self.update_ui_state)
         
         # Chemin
         path_layout = QHBoxLayout()
@@ -115,9 +134,8 @@ class ConfigTab(QWidget):
         self.input_group.setLayout(input_layout)
         layout.addWidget(self.input_group)
         
-        # Update visibility based on type
-        self.radio_images.toggled.connect(self.update_ui_state)
-        self.radio_video.toggled.connect(self.update_ui_state)
+        # Update visibility based on mode
+        self.combo_mode.currentIndexChanged.connect(self.update_ui_state)
         
         # Groupe de sortie
         self.output_group = QGroupBox(tr("group_output"))
@@ -156,26 +174,27 @@ class ConfigTab(QWidget):
         self.undistort_check = QCheckBox(tr("check_undistort"))
         self.undistort_check.setChecked(False)
         options_layout.addWidget(self.undistort_check)
- 
-        # 360 Extractor
-        self.check_source_360 = QCheckBox(tr("check_source_360"))
-        self.check_source_360.setToolTip(tr("tip_source_360"))
-        self.check_source_360.setChecked(False)
-        self.check_source_360.clicked.connect(self.on_source_360_toggled)
-        options_layout.addWidget(self.check_source_360)
- 
-        # Check if 360 engine is installed
-        if not Extractor360Engine().is_installed():
-            # self.check_source_360.setEnabled(False) # Removed per user request
-            self.check_source_360.setToolTip(tr("360_status_missing"))
- 
-        self.chk_upscale = QCheckBox(tr("upscale_check_colmap"))
-        self.chk_upscale.setChecked(False)
-        options_layout.addWidget(self.chk_upscale)
         
         options_layout.addStretch()
         self.options_group.setLayout(options_layout)
         layout.addWidget(self.options_group)
+        
+        # Progress Bar & Status (hidden by default)
+        progress_layout = QVBoxLayout()
+        self.lbl_status = QLabel("")
+        self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_status.setStyleSheet("color: #aaaaaa; font-style: italic;")
+        self.lbl_status.setVisible(False)
+        progress_layout.addWidget(self.lbl_status)
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setVisible(False)
+        progress_layout.addWidget(self.progress_bar)
+        
+        layout.addLayout(progress_layout)
         
         # Boutons d'action
         action_layout = QHBoxLayout()
@@ -255,29 +274,81 @@ class ConfigTab(QWidget):
             # No restart needed anymore!
 
     def update_ui_state(self):
-        """Met à jour la visibilité selon le type d'entrée"""
-        is_video = self.radio_video.isChecked()
+        """Met à jour la visibilité selon le mode d'entraînement"""
+        mode = self.get_training_mode()
+        is_gsplat = (mode == "gsplat")
+        
+        self.lbl_type.setVisible(is_gsplat)
+        self.radio_images.setVisible(is_gsplat)
+        self.radio_video.setVisible(is_gsplat)
+        
+        is_video = (mode == "gsplat" and self.radio_video.isChecked()) or (mode in ["360", "4dgs"])
+        
+        # FPS input is visible only if we can give video sources in theory
         self.fps_spin.setVisible(is_video)
         self.label_fps.setVisible(is_video)
+        
+        # Undistort check makes sense for gsplat
+        self.undistort_check.setVisible(mode == "gsplat")
+        
+        # Re-translate based on dynamic mode specific checks if needed
+        # We also clear path if switching modes normally makes it invalid, but for now leave as is.
 
     def browse_input(self):
-        """Parcourir l'entrée"""
-        if self.radio_images.isChecked():
-            path = get_existing_directory(self, tr("group_input"))
-            if path:
-                self.input_path.setText(path)
-        else:
+        """Parcourir l'entrée en fonction du mode sélectionné"""
+        mode = self.get_training_mode()
+        
+        if mode == "gsplat":
+            # Can be multiple videos, multiple photos, or a folder
+            reply = QMessageBox.question(self, "Choisir le type de source", 
+                                       "Voulez-vous sélectionner l'ensemble d'un dossier (Oui) ou bien des fichiers spécifiques (Non)?",
+                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                path = get_existing_directory(self, tr("group_input"))
+                if path:
+                    self.input_path.setText(path)
+            else:
+                filters = "Images (*.jpg *.jpeg *.png);;Tous (*.*)" if self.radio_images.isChecked() else "Vidéos (*.mp4 *.mov *.avi *.mkv *.MP4 *.MOV);;Tous (*.*)"
+                paths, _ = get_open_file_names(
+                    self, tr("group_input"),
+                    "", filters
+                )
+                if paths:
+                    self.input_path.setText("|".join(paths))
+
+        elif mode == "sharp":
+            # One image or an image folder
+            reply = QMessageBox.question(self, "Choisir le type de source", 
+                                       "Voulez-vous sélectionner un dossier d'images (Oui) ou une seule image (Non)?",
+                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                path = get_existing_directory(self, tr("group_input"))
+                if path:
+                    self.input_path.setText(path)
+            else:
+                paths, _ = get_open_file_names(
+                    self, tr("group_input"),
+                    "", "Images (*.jpg *.jpeg *.png);;Tous (*.*)"
+                )
+                if paths:
+                    self.input_path.setText(paths[0]) # Enforce single
+
+        elif mode == "360":
+            # Exactly one video
             paths, _ = get_open_file_names(
                 self, tr("group_input"),
                 "", "Videos (*.mp4 *.mov *.avi *.mkv *.MP4 *.MOV);;Tous (*.*)"
             )
             if paths:
-                if self.check_source_360.isChecked() and len(paths) > 1:
+                if len(paths) > 1:
                      QMessageBox.warning(self, tr("msg_warning"), tr("err_360_single_video", "Le mode 360 ne supporte qu'une vidéo."))
-                     paths = paths[:1]
-                     
-                joined_paths = "|".join(paths)
-                self.input_path.setText(joined_paths)
+                self.input_path.setText(paths[0])
+
+        elif mode == "4dgs":
+            # Folder containing videos
+            path = get_existing_directory(self, tr("group_input"))
+            if path:
+                self.input_path.setText(path)
             
     def browse_output(self):
         """Parcourir la sortie"""
@@ -292,20 +363,15 @@ class ConfigTab(QWidget):
         self.on_input_changed(path)
 
     def on_input_changed(self, path):
-        """Met à jour l'UI en fonction du type d'input"""
+        """Met à jour l'UI en fonction du mode/chemin"""
         if not path: return
+        mode = self.get_training_mode()
         
-        # 360 Source mode constraint: strictly single video
-        if self.check_source_360.isChecked() and "|" in str(path):
+        # Constraint checks
+        if mode == "360" and "|" in str(path):
             QMessageBox.warning(self, tr("msg_warning"), tr("err_360_single_video", "Le mode 360 ne supporte qu'une vidéo."))
             path = str(path).split("|")[0]
             self.input_path.setText(path)
-
-        ext = Path(path).suffix.lower()
-        if ext in ['.mp4', '.mov', '.avi', '.mkv']:
-            self.radio_video.setChecked(True)
-        else:
-            self.radio_images.setChecked(True)
             
     # Getters/Setters pour la configuration
     def get_input_path(self): return self.input_path.text()
@@ -323,66 +389,71 @@ class ConfigTab(QWidget):
     def get_fps(self): return self.fps_spin.value()
     def set_fps(self, fps): self.fps_spin.setValue(fps)
     
-    def get_input_type(self): return "video" if self.radio_video.isChecked() else "images"
-    def set_input_type(self, type_str):
-        if type_str == "video": self.radio_video.setChecked(True)
-        else: self.radio_images.setChecked(True)
-        
+    def get_training_mode(self): return self.combo_mode.currentData()
+    def set_training_mode(self, mode):
+        idx = self.combo_mode.findData(mode)
+        if idx >= 0:
+            self.combo_mode.setCurrentIndex(idx)
+            
+    def get_input_type(self):
+        """Returns 'video' or 'images' based on mode and radio buttons"""
+        mode = self.get_training_mode()
+        if mode == "gsplat":
+            return "video" if self.radio_video.isChecked() else "images"
+        elif mode in ["360", "4dgs"]:
+            return "video"
+        return "images"
+    
     def get_undistort(self): return self.undistort_check.isChecked()
     def set_undistort(self, val): self.undistort_check.setChecked(val)
     
     def get_auto_brush(self): return self.chk_auto_brush.isChecked()
     def set_auto_brush(self, val): self.chk_auto_brush.setChecked(val)
 
-    def get_upscale(self): return self.chk_upscale.isChecked()
-    def set_upscale(self, val): self.chk_upscale.setChecked(val)
-    
-    def set_processing_state(self, is_processing):
-        """Met à jour l'état des boutons pendant le traitement"""
-        self.btn_process.setEnabled(not is_processing)
-        self.btn_stop.setEnabled(is_processing)
-        self.btn_delete_dataset.setEnabled(not is_processing)
-        self.combo_lang.setEnabled(not is_processing)
-        
-        if is_processing:
-            self.btn_process.setText(tr("btn_stop"))
-            self.btn_process.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #aa4444; color: white;")
-        else:
-            self.btn_process.setText(tr("btn_process"))
-            self.btn_process.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #2a82da; color: white;")
 
-    def on_source_360_toggled(self):
-        """Handle 360 Source logic"""
-        if self.check_source_360.isChecked():
-            # Force Video mode
-            self.radio_video.setChecked(True)
-            self.radio_images.setEnabled(False)
-            
-            # Disable Upscale checkbox
-            self.chk_upscale.setChecked(False)
-            self.chk_upscale.setEnabled(False)
-            
-            # Warn if multiple videos
-            path = self.input_path.text()
-            if "|" in path:
-                QMessageBox.warning(self, tr("msg_warning"), tr("err_360_single_video"))
-                self.input_path.setText(path.split("|")[0])
+    
+    def set_processing_state(self, processing=True):
+        """Bloque ou débloque les composants UI pendant l'entrainement"""
+        # Disable/Enable inputs
+        self.input_group.setEnabled(not processing)
+        self.output_group.setEnabled(not processing)
+        self.options_group.setEnabled(not processing)
+        self.btn_delete_dataset.setEnabled(not processing)
+        self.combo_lang.setEnabled(not processing)
+        
+        # Toggle Action Buttons
+        self.btn_process.setEnabled(not processing)
+        self.btn_process.setText(tr("btn_process") if not processing else tr("msg_processing"))
+        if processing:
+            self.btn_process.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #aaaaaa; color: white;")
         else:
-            self.radio_images.setEnabled(True)
-            self.chk_upscale.setEnabled(True)
+            self.btn_process.setStyleSheet("font-size: 16px; font-weight: bold; background-color: #2a82da; color: white;")
+            
+        self.btn_stop.setEnabled(processing)
+        
+        # Toggle Progress Visibility
+        self.progress_bar.setVisible(processing)
+        self.lbl_status.setVisible(processing)
+        
+        if processing:
+            self.progress_bar.setValue(0)
+            self.lbl_status.setText(tr("msg_processing", "Traitement en cours..."))
+        else:
+            self.progress_bar.setValue(0)
+            self.lbl_status.setText("")
+
+
 
     def get_state(self):
         """Retourne l'état complet pour la persistance"""
         return {
             "project_name": self.get_project_name(),
-            "input_type": self.get_input_type(),
+            "training_mode": self.get_training_mode(),
             "input_path": self.get_input_path(),
             "output_path": self.get_output_path(),
             "fps": self.get_fps(),
             "undistort": self.get_undistort(),
             "auto_brush": self.get_auto_brush(),
-            "upscale_active": self.get_upscale(),
-            "source_360": self.check_source_360.isChecked(),
             "lang": self.combo_lang.currentData()
         }
 
@@ -391,19 +462,12 @@ class ConfigTab(QWidget):
         if not state: return
         
         if "project_name" in state: self.set_project_name(state["project_name"])
-        if "input_type" in state: self.set_input_type(state["input_type"])
+        if "training_mode" in state: self.set_training_mode(state["training_mode"])
         if "input_path" in state: self.set_input_path(state["input_path"])
         if "output_path" in state: self.set_output_path(state["output_path"])
         if "fps" in state: self.set_fps(state["fps"])
         if "undistort" in state: self.set_undistort(state["undistort"])
         if "auto_brush" in state: self.set_auto_brush(state["auto_brush"])
-        if "upscale_active" in state: self.set_upscale(state["upscale_active"])
-        
-        # Load 360 state
-        is_360 = state.get("source_360", False)
-        if self.check_source_360.isEnabled():
-            self.check_source_360.setChecked(is_360)
-            self.on_source_360_toggled()
         
         # Lang is special, might require restart if changed, so we just set combo if it matches
         # or we let the main app handle valid lang loading.
@@ -414,9 +478,9 @@ class ConfigTab(QWidget):
         self.update_ui_state()
 
     def get_upscale_config(self, tab_params):
-        """Combines local checkbox with tab params"""
+        """Returns upscale generic params for the ColmapWorker if needed, default offline"""
         return {
-            "active": self.get_upscale(),
+            "active": False,
             "model_name": tab_params.get("model_name", "RealESRGAN_x4plus"),
             "tile": tab_params.get("tile", 0),
             "target_scale": tab_params.get("scale_factor", 4),
@@ -441,6 +505,11 @@ class ConfigTab(QWidget):
         self.lbl_lang_change.setText(tr("lang_change") + ":")
         self.input_group.setTitle(tr("group_input"))
         self.lbl_proj_name.setText(tr("label_project_name"))
+        self.lbl_mode.setText(tr("label_training_mode"))
+        self.combo_mode.setItemText(0, tr("mode_gsplat"))
+        self.combo_mode.setItemText(1, tr("mode_sharp"))
+        self.combo_mode.setItemText(2, tr("mode_360"))
+        self.combo_mode.setItemText(3, tr("mode_4dgs"))
         self.lbl_type.setText(tr("label_type"))
         self.radio_images.setText(tr("radio_images"))
         self.radio_video.setText(tr("radio_video"))
@@ -456,12 +525,6 @@ class ConfigTab(QWidget):
         
         self.options_group.setTitle(tr("group_options"))
         self.undistort_check.setText(tr("check_undistort"))
-        self.check_source_360.setText(tr("check_source_360"))
-        self.check_source_360.setToolTip(tr("tip_source_360"))
-        if not Extractor360Engine().is_installed():
-             self.check_source_360.setToolTip(tr("360_status_missing"))
-             
-        self.chk_upscale.setText(tr("upscale_check_colmap"))
         
         self.btn_process.setText(tr("btn_process") if self.btn_process.isEnabled() else tr("btn_stop"))
         self.btn_stop.setText(tr("btn_stop"))

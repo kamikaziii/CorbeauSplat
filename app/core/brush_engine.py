@@ -1,7 +1,6 @@
 import os
 import sys
 import subprocess
-from pathlib import Path
 from .base_engine import BaseEngine
 from .system import resolve_binary
 

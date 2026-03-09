@@ -1,6 +1,5 @@
 import os
 import subprocess
-import signal
 import sys
 import threading
 import http.server
@@ -8,7 +7,7 @@ import socketserver
 from pathlib import Path
 from urllib.parse import urlparse
 from .base_engine import BaseEngine
-from .system import resolve_binary, resolve_project_root
+from .system import resolve_project_root
 
 class SuperSplatEngine(BaseEngine):
     """Moteur pour gérer le serveur SuperSplat et le serveur de données"""

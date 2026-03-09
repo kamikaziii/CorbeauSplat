@@ -4,7 +4,6 @@ from pathlib import Path
 from .base_engine import BaseEngine
 from app.scripts.setup_dependencies import install_extractor_360, get_venv_360_python, uninstall_extractor_360, resolve_project_root
 
-from app.core.i18n import tr
 
 class Extractor360Engine(BaseEngine):
     def __init__(self, logger_callback=None):
@@ -27,11 +26,12 @@ class Extractor360Engine(BaseEngine):
         """Uninstalls"""
         uninstall_extractor_360()
 
-    def run_extraction(self, input_path, output_dir, params, progress_callback=None, log_callback=None, check_cancel_callback=None):
+    def run_extraction(self, input_path, output_dir, params, progress_callback=None, log_callback=None, status_callback=None, check_cancel_callback=None):
         """
         Runs the extraction CLI.
         params: dict of arguments mirroring CLI args
         """
+        if status_callback: status_callback(tr("status_extracting_360", "Extraction vidéo 360°..."))
         if not self.is_installed():
             if log_callback: log_callback("Error: 360Extractor not installed.")
             return False
@@ -127,4 +127,5 @@ class Extractor360Engine(BaseEngine):
                 except (ValueError, IndexError):
                     pass
 
+        if status_callback: status_callback(tr("status_ready", "Traitement terminé !"))
         return self.process.wait() == 0

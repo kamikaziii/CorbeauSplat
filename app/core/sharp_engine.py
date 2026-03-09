@@ -1,10 +1,9 @@
 import os
 import sys
 import subprocess
-import signal
 from pathlib import Path
 from .base_engine import BaseEngine
-from .system import resolve_binary, resolve_project_root
+from .system import resolve_project_root
 
 class SharpEngine(BaseEngine):
     """Moteur d'execution pour Apple ML Sharp"""

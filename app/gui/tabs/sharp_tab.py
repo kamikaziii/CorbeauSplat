@@ -1,12 +1,11 @@
-from pathlib import Path
 from PyQt6.QtCore import pyqtSignal, Qt
 from app.core.i18n import tr, add_language_observer
 from app.gui.widgets.drop_line_edit import DropLineEdit
 from app.gui.widgets.dialog_utils import get_existing_directory, get_open_file_name
-from app.scripts.setup_dependencies import install_sharp, uninstall_sharp, resolve_project_root
+from app.scripts.setup_dependencies import install_sharp, uninstall_sharp
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit,
-    QGroupBox, QFormLayout, QFileDialog, QCheckBox, QComboBox, QMessageBox, QProgressDialog, QApplication
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QGroupBox,
+    QFormLayout, QCheckBox, QComboBox, QMessageBox, QProgressDialog, QApplication
 )
 
 class SharpTab(QWidget):

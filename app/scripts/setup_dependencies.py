@@ -3,10 +3,9 @@ import os
 import sys
 import shutil
 import subprocess
-import time
 import json
 from pathlib import Path
-from app.core.system import resolve_binary, resolve_project_root
+from app.core.system import resolve_project_root
 
 # Constants
 EXTRACTOR_360_REPO = "https://github.com/nicolasdiolez/360Extractor"
@@ -319,7 +318,6 @@ class BrushEngineDep(EngineDependency):
                     shutil.move(str(src), str(self.engines_dir / "brush"))
                     break
             shutil.rmtree(str(bin_dir), ignore_errors=True)
-            self.save_local_version("v0.3.0")
             print("✅ Brush compiled and installed successfully.")
         except Exception as e:
             print(f"❌ Failed to install Brush from source: {e}")

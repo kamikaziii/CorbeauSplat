@@ -2,9 +2,9 @@ from pathlib import Path
 import webbrowser
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit,
-    QGroupBox, QCheckBox, QFileDialog, QMessageBox, QSpinBox, QFormLayout
+    QGroupBox, QCheckBox, QMessageBox, QSpinBox, QFormLayout
 )
-from PyQt6.QtCore import pyqtSignal, QTimer
+from PyQt6.QtCore import pyqtSignal
 from app.core.i18n import tr, add_language_observer
 from app.core.superplat_engine import SuperSplatEngine
 from app.gui.widgets.dialog_utils import get_open_file_name
@@ -154,14 +154,7 @@ class SuperSplatTab(QWidget):
 
     def open_browser(self):
         """Construit l'URL et ouvre le navigateur"""
-        base_url = f"http://localhost:{self.splat_port.value()}/editor" # Assume /editor path from playcanvas structure? Or just root?
-        # Checked web search: https://superspl.at/editor 
-        # But local serve dist usually serves root. Let's assume root first, or maybe /editor if structure dictates.
-        # package.json says homepage .../editor.
-        # But `serve dist` usually serves the index.html in dist.
-        # If dist contains index.html directly, it's root.
-        # We will try root first.
-        
+        # Construit l'URL racine de SuperSplat
         url = f"http://localhost:{self.splat_port.value()}"
         
         params = []

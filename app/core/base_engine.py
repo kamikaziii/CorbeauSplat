@@ -1,7 +1,6 @@
 import os
 import sys
 import signal
-import logging
 from pathlib import Path
 from .system import get_device, resolve_project_root
 
@@ -57,4 +56,3 @@ class BaseEngine:
 
     def cleanup_temp_files(self, patterns):
         """Standardized cleanup for temp files"""
-        pass

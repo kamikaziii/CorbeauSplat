@@ -1,12 +1,9 @@
 
-import os
-import sys
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QGroupBox,
-    QFormLayout, QCheckBox, QComboBox, QSpinBox, QMessageBox, QProgressDialog, QApplication
+    QWidget, QVBoxLayout, QPushButton, QLabel, QGroupBox, QFormLayout,
+    QCheckBox, QComboBox, QSpinBox, QMessageBox, QProgressDialog, QApplication
 )
-from PyQt6.QtCore import pyqtSignal, Qt, QThread
-from pathlib import Path
+from PyQt6.QtCore import Qt
 from app.core.i18n import tr, add_language_observer
 from app.core.upscale_engine import UpscaleEngine
 from app.scripts.setup_dependencies import install_upscale, uninstall_upscale, resolve_project_root
@@ -288,7 +285,7 @@ class UpscaleTab(QWidget):
              # We can just pass a dummy path if it resolves internally?
              # install_upscale_deps(engines_dir, version_file)
              
-             engines_dir = resolve_project_root() / "engines"
+             resolve_project_root() / "engines"
              
              success = install_upscale()
              

@@ -1,9 +1,9 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QCheckBox, QComboBox, QSpinBox, QDoubleSpinBox, QGroupBox, 
-    QFileDialog, QMessageBox, QProgressBar
+    QMessageBox, QProgressBar
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QThread
+from PyQt6.QtCore import pyqtSignal, QThread
 
 from app.core.i18n import tr, add_language_observer
 from app.core.extractor_360_engine import Extractor360Engine

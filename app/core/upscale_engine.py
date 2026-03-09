@@ -1,10 +1,5 @@
-import os
-import shutil
-import sys
-import subprocess
 from pathlib import Path
 from .base_engine import BaseEngine
-from .system import is_apple_silicon, get_optimal_threads, get_memory_info
 
 class UpscaleEngine(BaseEngine):
     """
@@ -24,7 +19,7 @@ class UpscaleEngine(BaseEngine):
         """
         import sys
         try:
-             import torchvision.transforms.functional_tensor
+             pass
         except ImportError:
             try:
                 import torchvision.transforms.functional as F
@@ -36,9 +31,7 @@ class UpscaleEngine(BaseEngine):
     def is_installed(self):
         """Checks if realesrgan and torch are importable."""
         try:
-            import torch
             self._apply_patches()
-            import realesrgan
             return True
         except ImportError as e:
             print(f"DEBUG: Upscale import failed: {e}")

@@ -2,7 +2,6 @@ import platform
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 def resolve_project_root() -> Path:
@@ -91,7 +90,7 @@ def check_dependencies():
 
     # Check send2trash
     try:
-        import send2trash
+        pass
     except ImportError:
         missing.append('send2trash')
 

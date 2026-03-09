@@ -1,10 +1,9 @@
-import sys
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QScrollArea, QGroupBox, QFormLayout, 
-    QComboBox, QCheckBox, QSpinBox, QDoubleSpinBox, QMessageBox
+    QComboBox, QCheckBox, QSpinBox, QDoubleSpinBox
 )
 from app.core.params import ColmapParams
-from app.core.system import is_apple_silicon, get_optimal_threads, resolve_binary
+from app.core.system import is_apple_silicon, get_optimal_threads
 from app.core.i18n import tr, add_language_observer
 
 class ParamsTab(QWidget):

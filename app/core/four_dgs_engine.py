@@ -1,6 +1,5 @@
 import os
 import subprocess
-import concurrent.futures
 import shutil
 from pathlib import Path
 from .base_engine import BaseEngine
@@ -10,8 +9,9 @@ class FourDGSEngine(BaseEngine):
     """
     Moteur pour la préparation de datasets 4DGS (Video -> COLMAP -> Nerfstudio).
     """
-    def __init__(self, logger_callback=None):
+    def __init__(self, logger_callback=None, status_callback=None):
         super().__init__("4DGS", logger_callback)
+        self.status = status_callback if status_callback else lambda x: None
         
         # Resolve binaries
         self.ffmpeg = resolve_binary("ffmpeg") or "ffmpeg"
@@ -64,6 +64,7 @@ class FourDGSEngine(BaseEngine):
 
         # 1. Feature Extraction
         self.log("--- COLMAP: Feature Extraction ---")
+        self.status(tr("status_feature_extraction", "Extraction des features (COLMAP)..."))
         cmd_extract = [
             self.colmap, "feature_extractor",
             "--database_path", str(db_path),
@@ -84,6 +85,7 @@ class FourDGSEngine(BaseEngine):
         # Pour faire simple : Exhaustive Matcher est robuste.
         
         self.log("--- COLMAP: Feature Matching ---")
+        self.status(tr("status_feature_matching", "Matching des features..."))
         cmd_match = [
             self.colmap, "exhaustive_matcher",
             "--database_path", str(db_path),
@@ -93,6 +95,7 @@ class FourDGSEngine(BaseEngine):
         
         # 3. Mapper
         self.log("--- COLMAP: Mapper (Sparse Reconstruction) ---")
+        self.status(tr("status_reconstruction", "Reconstruction 3D (Mapper)..."))
         cmd_mapper = [
             self.colmap, "mapper",
             "--database_path", str(db_path),
@@ -147,6 +150,7 @@ class FourDGSEngine(BaseEngine):
             cam_dir = images_root / cam_name
             
             self.log(f"Extraction {vid_path.name} -> {cam_name} ({fps} fps)...")
+            self.status(f"{tr('status_extracting_frames', 'Extraction des frames')} ({vid_path.name})...")
             if not self.extract_frames(vid_path, cam_dir, fps):
                 return False
                 
@@ -162,6 +166,7 @@ class FourDGSEngine(BaseEngine):
         # Si nerfstudio est là, utilisons ns-process-data images
         if self.check_nerfstudio():
             self.log("ns-process-data détecté. Lancement du processing Nerfstudio...")
+            self.status(tr("status_nerfstudio", "Traitement Nerfstudio en cours..."))
             
             # ns-process-data images --data output_dir/images --output-dir output_dir
             cmd_ns = [
