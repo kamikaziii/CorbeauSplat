@@ -161,18 +161,21 @@ class ColmapGUI(QMainWindow):
     def get_current_params(self):
         """Récupère les paramètres actuels de l'onglet params et ajoute ceux de config"""
         params = self.params_tab.get_params()
-        # Mettre à jour avec les params de l'onglet config si nécessaire
-        # Pour l'instant undistort_images est le seul qui pourrait être cross-tab, 
-        # mais il est géré dans ConfigTab pour l'action. 
-        # ColmapParams l'attend, donc on le set.
         params.undistort_images = self.config_tab.get_undistort()
         return params
 
+    def get_upscale_config(self):
+        """Combine global upscale settings with the toggle from Config Tab"""
+        upscale_params = self.upscale_tab.get_params()
+        upscale_params["active"] = self.config_tab.get_upscale()
+        # For Sharp worker, it expects 'upscale' key
+        upscale_params["upscale"] = upscale_params["active"]
+        return upscale_params
+
     def get_extractor_360_config(self):
-        """Combines params from Extractor Tab with Enabled state from Config Tab"""
+        """Combines params from Extractor Tab with current mode"""
         params = self.extractor_360_tab.get_params()
-        # Override enabled state by the checkbox in Config Tab
-        params["enabled"] = self.config_tab.check_source_360.isChecked()
+        params["enabled"] = (self.config_tab.get_training_mode() == "360")
         return params
         
     def process(self):
@@ -195,6 +198,7 @@ class ColmapGUI(QMainWindow):
                 input_path, output_path, self.config_tab.get_input_type(),
                 self.config_tab.get_fps(),
                 self.config_tab.get_project_name(),
+                upscale_params=self.get_upscale_config(),
                 extractor_360_params=None # Disabled
             )
             self.worker.log_signal.connect(self.logs_tab.append_log)
@@ -205,7 +209,10 @@ class ColmapGUI(QMainWindow):
             
         elif mode == "sharp":
             self.logs_tab.append_log(tr("msg_processing") + " (ML Sharp)")
-            self.sharp_worker = SharpWorker(input_path, output_path, self.sharp_tab.get_params())
+            sharp_params = self.sharp_tab.get_params()
+            sharp_params.update(self.get_upscale_config())
+            
+            self.sharp_worker = SharpWorker(input_path, output_path, sharp_params)
             self.sharp_worker.log_signal.connect(self.logs_tab.append_log)
             self.sharp_worker.progress_signal.connect(self.config_tab.progress_bar.setValue)
             self.sharp_worker.status_signal.connect(self.config_tab.lbl_status.setText)
@@ -222,6 +229,7 @@ class ColmapGUI(QMainWindow):
                 input_path, output_path, "video",
                 self.config_tab.get_fps(),
                 self.config_tab.get_project_name(),
+                upscale_params=self.get_upscale_config(),
                 extractor_360_params=ext_params
             )
             self.worker.log_signal.connect(self.logs_tab.append_log)

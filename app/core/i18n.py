@@ -23,6 +23,9 @@ TRANSLATIONS = {
         "radio_images": "Images",
         "radio_video": "Video",
         "label_path": "Dossier/Fichier :",
+        "label_source_select": "Type de sélection :",
+        "radio_source_folder": "Dossier",
+        "radio_source_files": "Fichier(s)",
         "btn_browse": "Parcourir",
         "label_fps": "FPS extraction video :",
         
@@ -413,6 +416,9 @@ TRANSLATIONS = {
         "radio_images": "Images",
         "radio_video": "Video",
         "label_path": "Folder/File:",
+        "label_source_select": "Selection Type:",
+        "radio_source_folder": "Folder",
+        "radio_source_files": "File(s)",
         "btn_browse": "Browse",
         "label_fps": "Video extraction FPS:",
         

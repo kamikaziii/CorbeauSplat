@@ -6,6 +6,8 @@
 -   **Multi-language Expansion**: Added full localization for **Arabic (AR)**, **Russian (RU)**, **Chinese (ZH)**, and **Japanese (JA)**.
 -   **Training Mode Selector**: Refactored the "Entraînement" tab to use a dropdown for Training Mode (Gsplat, ML Sharp, 360 Extractor, 4DGS) instead of generic radio buttons, adapting the UI dynamically for each mode.
 -   **GSplat Source Type**: Re-added an explicit "Images / Video" selector specifically when Gsplat mode is chosen, to correctly inform the underlying pipeline.
+-   **Persistent Input Selection**: Replaced folder/file selection popups with dedicated radio buttons in the Training tab for a smoother, non-intrusive workflow.
+-   **Upscale Restoration**: Re-enabled the "Upscale (Real-ESRGAN)" toggle for Gsplat, Sharp, and 360 modes, fully integrated with the progress bar.
 -   **Live Progress Bar**: Added a unified progress bar and status indicator for all engine workflows (COLMAP, Sharp, 4DGS, 360).
 
 ### 🛠 Improvements
@@ -15,6 +17,7 @@
 -   **Code Audit**: Removed dozens of unused, dead, or deprecated imports across `app/`.
 
 ### 🐞 Bug Fixes
+-   **`UpscaleEngine` Compatibility**: Hotfixed a critical `ModuleNotFoundError` (`torchvision.transforms.functional_tensor`) caused by newer `torchvision` versions (0.15+).
 -   **Bus Error 10 on macOS**: Patched a critical SIGBUS crash triggered when `cv2` (and NumPy's Accelerate framework) attempted to natively initialize itself inside a QThread sub-worker. `cv2` is now safely pre-loaded on the main UI thread.
 
 ## [0.75] - 2026-03-03

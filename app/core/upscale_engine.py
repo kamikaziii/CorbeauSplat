@@ -19,7 +19,7 @@ class UpscaleEngine(BaseEngine):
         """
         import sys
         try:
-             pass
+            import torchvision.transforms.functional_tensor
         except ImportError:
             try:
                 import torchvision.transforms.functional as F

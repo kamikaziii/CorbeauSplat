@@ -107,6 +107,20 @@ class ConfigTab(QWidget):
         type_layout.addStretch()
         input_layout.addLayout(type_layout)
         self.radio_images.toggled.connect(self.update_ui_state)
+
+        # Type de sélection (Dossier / Fichiers)
+        self.source_select_layout = QHBoxLayout()
+        self.lbl_source_select = QLabel(tr("label_source_select"))
+        self.source_select_layout.addWidget(self.lbl_source_select)
+        
+        self.radio_source_folder = QRadioButton(tr("radio_source_folder"))
+        self.radio_source_folder.setChecked(True)
+        self.source_select_layout.addWidget(self.radio_source_folder)
+        
+        self.radio_source_files = QRadioButton(tr("radio_source_files"))
+        self.source_select_layout.addWidget(self.radio_source_files)
+        self.source_select_layout.addStretch()
+        input_layout.addLayout(self.source_select_layout)
         
         # Chemin
         path_layout = QHBoxLayout()
@@ -174,6 +188,10 @@ class ConfigTab(QWidget):
         self.undistort_check = QCheckBox(tr("check_undistort"))
         self.undistort_check.setChecked(False)
         options_layout.addWidget(self.undistort_check)
+        
+        self.chk_upscale = QCheckBox(tr("upscale_check_colmap", "Upscale (Real-ESRGAN)"))
+        self.chk_upscale.setChecked(False)
+        options_layout.addWidget(self.chk_upscale)
         
         options_layout.addStretch()
         self.options_group.setLayout(options_layout)
@@ -287,9 +305,18 @@ class ConfigTab(QWidget):
         # FPS input is visible only if we can give video sources in theory
         self.fps_spin.setVisible(is_video)
         self.label_fps.setVisible(is_video)
+
+        # Source selection type visibility (Gsplat and Sharp only)
+        show_source_select = (mode in ["gsplat", "sharp"])
+        self.lbl_source_select.setVisible(show_source_select)
+        self.radio_source_folder.setVisible(show_source_select)
+        self.radio_source_files.setVisible(show_source_select)
         
         # Undistort check makes sense for gsplat
         self.undistort_check.setVisible(mode == "gsplat")
+        
+        # Upscale check for gsplat, sharp, 360
+        self.chk_upscale.setVisible(mode in ["gsplat", "sharp", "360"])
         
         # Re-translate based on dynamic mode specific checks if needed
         # We also clear path if switching modes normally makes it invalid, but for now leave as is.
@@ -299,11 +326,8 @@ class ConfigTab(QWidget):
         mode = self.get_training_mode()
         
         if mode == "gsplat":
-            # Can be multiple videos, multiple photos, or a folder
-            reply = QMessageBox.question(self, "Choisir le type de source", 
-                                       "Voulez-vous sélectionner l'ensemble d'un dossier (Oui) ou bien des fichiers spécifiques (Non)?",
-                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            if reply == QMessageBox.StandardButton.Yes:
+            # Uses the radio button choice instead of popup
+            if self.radio_source_folder.isChecked():
                 path = get_existing_directory(self, tr("group_input"))
                 if path:
                     self.input_path.setText(path)
@@ -317,11 +341,8 @@ class ConfigTab(QWidget):
                     self.input_path.setText("|".join(paths))
 
         elif mode == "sharp":
-            # One image or an image folder
-            reply = QMessageBox.question(self, "Choisir le type de source", 
-                                       "Voulez-vous sélectionner un dossier d'images (Oui) ou une seule image (Non)?",
-                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            if reply == QMessageBox.StandardButton.Yes:
+            # Uses the radio button choice instead of popup
+            if self.radio_source_folder.isChecked():
                 path = get_existing_directory(self, tr("group_input"))
                 if path:
                     self.input_path.setText(path)
@@ -331,7 +352,7 @@ class ConfigTab(QWidget):
                     "", "Images (*.jpg *.jpeg *.png);;Tous (*.*)"
                 )
                 if paths:
-                    self.input_path.setText(paths[0]) # Enforce single
+                    self.input_path.setText(paths[0]) # Enforce single image for sharp if not folder
 
         elif mode == "360":
             # Exactly one video
@@ -410,6 +431,9 @@ class ConfigTab(QWidget):
     def get_auto_brush(self): return self.chk_auto_brush.isChecked()
     def set_auto_brush(self, val): self.chk_auto_brush.setChecked(val)
 
+    def get_upscale(self): return self.chk_upscale.isChecked()
+    def set_upscale(self, val): self.chk_upscale.setChecked(val)
+
 
     
     def set_processing_state(self, processing=True):
@@ -418,6 +442,7 @@ class ConfigTab(QWidget):
         self.input_group.setEnabled(not processing)
         self.output_group.setEnabled(not processing)
         self.options_group.setEnabled(not processing)
+        self.chk_upscale.setEnabled(not processing)
         self.btn_delete_dataset.setEnabled(not processing)
         self.combo_lang.setEnabled(not processing)
         

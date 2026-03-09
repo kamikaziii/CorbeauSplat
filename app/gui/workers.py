@@ -118,8 +118,8 @@ class ColmapWorker(BaseWorker):
 
         # 2. Check Upscale 
         if self.upscale_params and self.upscale_params.get("active", False):
-            # ... (Existing logic or placeholder)
-            self.engine.upscale_config = self.upscale_params # Inject manually for now
+            self.engine.upscale_config = self.upscale_params
+            self.log_signal.emit("--- Upscale activé pour COLMAP ---")
         
         success, message = self.engine.run()
         self.finished_signal.emit(success, message)
