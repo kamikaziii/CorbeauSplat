@@ -91,9 +91,6 @@ class ColmapGUI(QMainWindow):
         # Connect signals
         self.config_tab.processRequested.connect(self.process)
         self.config_tab.stopRequested.connect(self.stop_process)
-        self.config_tab.saveConfigRequested.connect(self.save_config)
-        self.config_tab.loadConfigRequested.connect(self.load_config)
-        self.config_tab.openBrushRequested.connect(self.open_in_brush)
         self.config_tab.deleteDatasetRequested.connect(self.delete_dataset)
         self.config_tab.quitRequested.connect(self.close)
         self.config_tab.relaunchRequested.connect(self.restart_application)
@@ -341,80 +338,6 @@ class ColmapGUI(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, tr("msg_error"), f"Impossible de supprimer le dataset:\n{str(e)}")
                 
-    def save_config(self):
-        """Sauvegarde la configuration"""
-        filename, _ = QFileDialog.getSaveFileName(
-            self, tr("btn_save_cfg"),
-            "", "JSON (*.json)"
-        )
-        
-        if filename:
-            params = self.get_current_params()
-            config = params.to_dict()
-            config['fps'] = self.config_tab.get_fps()
-            config['input_path'] = self.config_tab.get_input_path()
-            config['output_path'] = self.config_tab.get_output_path()
-            config['input_type'] = self.config_tab.get_input_type()
-            
-            with open(filename, 'w') as f:
-                json.dump(config, f, indent=2)
-                
-            QMessageBox.information(self, tr("msg_success"), "Configuration sauvegardee!")
-            
-    def load_config(self):
-        """Charge une configuration"""
-        filename, _ = QFileDialog.getOpenFileName(
-            self, tr("btn_load_cfg"),
-            "", "JSON (*.json)"
-        )
-        
-        if filename:
-            try:
-                with open(filename, 'r') as f:
-                    config = json.load(f)
-                    
-                # Load params
-                params = ColmapParams.from_dict(config)
-                self.params_tab.set_params(params)
-                
-                # Load config tab specific
-                if 'input_path' in config: self.config_tab.set_input_path(config['input_path'])
-                if 'output_path' in config: self.config_tab.set_output_path(config['output_path'])
-                if 'fps' in config: self.config_tab.set_fps(config['fps'])
-                if 'input_type' in config: self.config_tab.set_input_type(config['input_type'])
-                if 'undistort_images' in config: self.config_tab.set_undistort(config['undistort_images'])
-                
-                QMessageBox.information(self, tr("msg_success"), "Configuration chargee!")
-                
-            except Exception as e:
-                QMessageBox.critical(self, tr("msg_error"), f"Erreur de chargement:\n{str(e)}")
-                
-    def open_in_brush(self):
-        """Ouvre le dataset dans Brush"""
-        output_dir_str = self.config_tab.get_output_path()
-        if not output_dir_str:
-            QMessageBox.warning(self, tr("msg_warning"), "Aucun dossier de sortie selectionne")
-            return
-        
-        output_dir = Path(output_dir_str)
-        if not output_dir.exists():
-            QMessageBox.warning(self, tr("msg_warning"), tr("err_path_not_exists"))
-            return
-            
-        sparse_path = output_dir / "sparse" / "0"
-        
-        if sparse_path.exists():
-            msg = f"{tr('success_created', '')}\n\nOuvrez Brush et chargez:\n{output_dir}\n\n"
-            msg += "Structure:\n"
-            msg += f"- sparse/0/ (reconstruction COLMAP)\n"
-            if (output_dir / "images").exists():
-                msg += f"- images/ (images sources)\n"
-            msg += f"- brush_config.json (configuration)"
-        else:
-            msg = f"Dataset incomplet\n\nDossier: {output_dir}\n\nLa reconstruction n'est peut-etre pas terminee."
-            
-        QMessageBox.information(self, tr("btn_open_brush"), msg)
-
     def train_brush(self, force_auto=False):
         """Lance l'entrainement Brush"""
         brush_params = self.brush_tab.get_params()

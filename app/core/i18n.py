@@ -38,9 +38,6 @@ TRANSLATIONS = {
         # Config Tab - Actions
         "btn_process": "Creer Dataset COLMAP",
         "btn_stop": "Arreter",
-        "btn_save_cfg": "Sauvegarder Config",
-        "btn_load_cfg": "Charger Config",
-        "btn_open_brush": "Ouvrir dans Brush",
         "btn_quit": "Quitter",
         "btn_quit": "Quitter",
         "btn_relaunch": "Relancer",
@@ -431,9 +428,6 @@ TRANSLATIONS = {
         # Config Tab - Actions
         "btn_process": "Create COLMAP Dataset",
         "btn_stop": "Stop",
-        "btn_save_cfg": "Save Config",
-        "btn_load_cfg": "Load Config",
-        "btn_open_brush": "Open in Brush",
         "btn_quit": "Quit",
         "btn_quit": "Quit",
         "btn_relaunch": "Relaunch",
@@ -794,9 +788,6 @@ TRANSLATIONS = {
         # Config Tab - Actions
         "btn_process": "COLMAP Dataset erstellen",
         "btn_stop": "Stopp",
-        "btn_save_cfg": "Konfiguration speichern",
-        "btn_load_cfg": "Konfiguration laden",
-        "btn_open_brush": "In Brush öffnen",
         "btn_quit": "Beenden",
         "btn_relaunch": "Neu starten",
         "btn_reset": "Werkseinstellungen",
@@ -1131,9 +1122,6 @@ TRANSLATIONS = {
         # Config Tab - Actions
         "btn_process": "Crea Dataset COLMAP",
         "btn_stop": "Ferma",
-        "btn_save_cfg": "Salva Configurazione",
-        "btn_load_cfg": "Carica Configurazione",
-        "btn_open_brush": "Apri in Brush",
         "btn_quit": "Esci",
         "btn_relaunch": "Riavvia",
         "btn_reset": "Ripristino di Fabbrica",
@@ -1474,9 +1462,6 @@ TRANSLATIONS = {
         # Config Tab - Actions
         "btn_process": "Crear Dataset COLMAP",
         "btn_stop": "Detener",
-        "btn_save_cfg": "Guardar Configuración",
-        "btn_load_cfg": "Cargar Configuración",
-        "btn_open_brush": "Abrir en Brush",
         "btn_quit": "Salir",
         "btn_relaunch": "Reiniciar",
         "btn_reset": "Restablecimiento de Fábrica",
@@ -1808,9 +1793,7 @@ TRANSLATIONS = {
             "check_undistort": "إنشاء صور غير مشوهة",
             "btn_process": "إنشاء مجموعة بيانات COLMAP",
             "btn_stop": "إيقاف",
-            "btn_save_cfg": "حفظ التكوين",
-            "btn_load_cfg": "تحميل التكوين",
-            "btn_open_brush": "افتح في Brush",
+
             "btn_quit": "خروج",
             "btn_relaunch": "إعادة تشغيل",
             "btn_reset": "إعادة ضبط المصنع",
@@ -2116,9 +2099,7 @@ TRANSLATIONS = {
             "check_undistort": "Генерировать изображения без искажений (для плотной реконструкции)",
             "btn_process": "Создать датасет COLMAP",
             "btn_stop": "Остановить",
-            "btn_save_cfg": "Сохранить конфигурацию",
-            "btn_load_cfg": "Загрузить конфигурацию",
-            "btn_open_brush": "Открыть в Brush",
+
             "btn_quit": "Выход",
             "btn_relaunch": "Перезапустить",
             "btn_reset": "Сброс к заводским настройкам",
@@ -2424,9 +2405,7 @@ TRANSLATIONS = {
             "check_undistort": "生成无畸变图像（用于密集重建）",
             "btn_process": "创建 COLMAP 数据集",
             "btn_stop": "停止",
-            "btn_save_cfg": "保存配置",
-            "btn_load_cfg": "加载配置",
-            "btn_open_brush": "在 Brush 中打开",
+
             "btn_quit": "退出",
             "btn_relaunch": "重新启动",
             "btn_reset": "恢复出厂设置",
@@ -2732,9 +2711,7 @@ TRANSLATIONS = {
             "check_undistort": "歪みのない画像を生成する (密な再構成用)",
             "btn_process": "COLMAPデータセットを作成",
             "btn_stop": "停止",
-            "btn_save_cfg": "設定を保存",
-            "btn_load_cfg": "設定を読み込む",
-            "btn_open_brush": "Brushで開く",
+
             "btn_quit": "終了",
             "btn_relaunch": "再起動",
             "btn_reset": "工場出荷時設定にリセット",

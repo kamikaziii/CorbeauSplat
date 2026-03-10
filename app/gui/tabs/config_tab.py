@@ -14,9 +14,6 @@ class ConfigTab(QWidget):
     # Signaux pour les actions globales qui necessitent l'orchestration du Main Window
     processRequested = pyqtSignal()
     stopRequested = pyqtSignal()
-    saveConfigRequested = pyqtSignal()
-    loadConfigRequested = pyqtSignal()
-    openBrushRequested = pyqtSignal()
     deleteDatasetRequested = pyqtSignal()
     quitRequested = pyqtSignal()
     relaunchRequested = pyqtSignal()
@@ -230,22 +227,6 @@ class ConfigTab(QWidget):
         action_layout.addWidget(self.btn_stop)
         
         layout.addLayout(action_layout)
-        
-        config_layout = QHBoxLayout()
-        
-        self.btn_save = QPushButton(tr("btn_save_cfg"))
-        self.btn_save.clicked.connect(self.saveConfigRequested.emit)
-        config_layout.addWidget(self.btn_save)
-        
-        self.btn_load = QPushButton(tr("btn_load_cfg"))
-        self.btn_load.clicked.connect(self.loadConfigRequested.emit)
-        config_layout.addWidget(self.btn_load)
-        
-        self.btn_open_brush = QPushButton(tr("btn_open_brush"))
-        self.btn_open_brush.clicked.connect(self.openBrushRequested.emit)
-        config_layout.addWidget(self.btn_open_brush)
-        
-        layout.addLayout(config_layout)
         
         layout.addStretch()
         
@@ -553,9 +534,6 @@ class ConfigTab(QWidget):
         
         self.btn_process.setText(tr("btn_process") if self.btn_process.isEnabled() else tr("btn_stop"))
         self.btn_stop.setText(tr("btn_stop"))
-        self.btn_save.setText(tr("btn_save_cfg"))
-        self.btn_load.setText(tr("btn_load_cfg"))
-        self.btn_open_brush.setText(tr("btn_open_brush"))
         self.btn_quit.setText(tr("btn_quit"))
         self.btn_relaunch.setText(tr("btn_relaunch"))
         self.btn_reset.setText(tr("btn_reset"))

@@ -72,15 +72,17 @@ class ColmapEngine(BaseEngine):
             self.log(f"Préparation du projet dans : {project_dir}")
             
             # Validation Input
-            # Note: self.input_path is now a Path object, but video supports pipe strings
-            if self.input_type != "video":
-                 if not self.input_path.exists():
+            raw_input = str(self.input_path)
+            if "|" in raw_input:
+                first_path = Path(raw_input.split("|")[0].strip())
+                if not first_path.exists():
+                     return False, f"Entrée introuvable: {first_path}"
+            else:
+                if not self.input_path.exists():
                      return False, f"Entrée introuvable: {self.input_path}"
-            elif not "|" in str(self.input_path) and not self.input_path.exists():
-                 return False, f"Vidéo introuvable: {self.input_path}"
 
             # 1. Preparation des Images (Extraction ou Copie)
-            self.status(tr("status_prep_images", "Préparation des images..."))
+            self.status(tr("status_prep_images", "Préparation des visuels..."))
             if not self._prepare_images(images_dir):
                 return False, "Echec preparation images"
             
@@ -107,7 +109,7 @@ class ColmapEngine(BaseEngine):
             # 1. Feature Extraction
             if self.is_cancelled(): return False, tr("USER_CANCELLED")
             
-            self.status(tr("status_feature_extraction", "Extraction des features (COLMAP)..."))    
+            self.status(tr("status_feature_extraction", "Analyse des images en cours..."))    
             if not self.feature_extraction(str(database_path), str(images_dir)):
                 if self.is_cancelled(): return False, tr("USER_CANCELLED")
                 return False, "Échec extraction features"
@@ -117,7 +119,7 @@ class ColmapEngine(BaseEngine):
             # 2. Feature Matching
             if self.is_cancelled(): return False, tr("USER_CANCELLED")
             
-            self.status(tr("status_feature_matching", "Matching des features..."))
+            self.status(tr("status_feature_matching", "Recherche des points communs..."))
             if not self.feature_matching(str(database_path)):
                 if self.is_cancelled(): return False, tr("USER_CANCELLED")
                 return False, "Échec matching"
@@ -127,7 +129,7 @@ class ColmapEngine(BaseEngine):
             # 3. Reconstruction
             if self.is_cancelled(): return False, tr("USER_CANCELLED")
             
-            self.status(tr("status_reconstruction", "Reconstruction 3D (Mapper)..."))
+            self.status(tr("status_reconstruction", "Création de la scène 3D..."))
             if not self.mapper(str(database_path), str(images_dir), str(sparse_dir)):
                 if self.is_cancelled(): return False, tr("USER_CANCELLED")
                 return False, "Échec reconstruction"
@@ -141,7 +143,7 @@ class ColmapEngine(BaseEngine):
                 dense_dir = project_dir / "dense"
                 dense_dir.mkdir(exist_ok=True)
                 
-                self.status(tr("status_undistorting", "Undistortion des images..."))
+                self.status(tr("status_undistorting", "Correction optique des images..."))
                 if not self.image_undistorter(str(images_dir), str(sparse_dir), str(dense_dir)):
                     if self.is_cancelled(): return False, "Arrete par l'utilisateur"
                     return False, "Echec undistortion"
@@ -166,14 +168,29 @@ class ColmapEngine(BaseEngine):
         if self.input_type == "video":
             if self.is_cancelled(): return False
                 
-            # Support multi-fichiers séparés par "|"
-            video_paths = str(self.input_path).split("|")
+            # Identifier les chemins de vidéos (soit des fichiers séparés par '|', soit un dossier contenant des vidéos)
+            video_paths = []
+            if self.input_path.is_dir():
+                # Chercher toutes les vidéos dans le dossier
+                supported_exts = {'.mp4', '.mov', '.avi', '.mkv'}
+                video_paths = [
+                    f for f in self.input_path.rglob('*') 
+                    if f.is_file() and f.suffix.lower() in supported_exts
+                ]
+                video_paths.sort()
+            else:
+                # Fichiers uniques ou multiples séparés par '|'
+                video_paths = [Path(p.strip()) for p in str(self.input_path).split("|") if p.strip()]
+
             total_videos = len(video_paths)
             
-            for i, video_path_str in enumerate(video_paths):
+            if total_videos == 0:
+                self.log(f"Aucune vidéo trouvée dans: {self.input_path}")
+                return False
+            
+            for i, video_path in enumerate(video_paths):
                 if self.is_cancelled(): return False
                 
-                video_path = Path(video_path_str.strip())
                 if not video_path.exists():
                     self.log(f"Attention: Video introuvable: {video_path}")
                     continue
@@ -228,6 +245,7 @@ class ColmapEngine(BaseEngine):
                     if i % 10 == 0 or i == total_files - 1:
                         p = 5 + int((i / total_files) * 15) # 5-20% range
                         self.progress(p)
+                        self.status(f"Copie des images : {i+1} / {total_files}")
                 
                 self.log(f"✅ {total_files} images copiées vers {images_dir}")
                 return True
@@ -353,6 +371,7 @@ class ColmapEngine(BaseEngine):
             cv2.imwrite(str(f), resized)
             if (i + 1) % 10 == 0 or (i + 1) == len(images_to_resize):
                 self.log(f"Redimensionnement: {i+1}/{len(images_to_resize)}")
+                self.status(f"Ajustement taille : {i+1} / {len(images_to_resize)}")
 
         self.log(f"✅ {len(images_to_resize)} images redimensionnées vers {min_w}×{min_h} px")
         return True
@@ -389,8 +408,15 @@ class ColmapEngine(BaseEngine):
                 if self.is_cancelled():
                     self._current_process.terminate()
                     return None
-                if 'frame=' in line or 'error' in line.lower():
-                    self.log(line.rstrip())
+                line_str = line.rstrip()
+                if 'frame=' in line_str or 'error' in line_str.lower():
+                    self.log(line_str)
+                    if 'frame=' in line_str:
+                        try:
+                            f_num = line_str.split('frame=')[1].strip().split()[0]
+                            self.status(f"Extraction {base_name} : image {f_num}")
+                        except:
+                            pass
             
             self._current_process.wait()
             
@@ -413,7 +439,7 @@ class ColmapEngine(BaseEngine):
         finally:
             self._current_process = None
 
-    def run_command(self, cmd, description):
+    def run_command(self, cmd, description, status_prefix=None):
         """Exécute une commande avec support d'interruption"""
         self.log(f"\n{'='*60}\n{description}\n{'='*60}")
         
@@ -433,7 +459,29 @@ class ColmapEngine(BaseEngine):
                 if self.is_cancelled():
                     self._current_process.terminate()
                     return False
-                self.log(line.rstrip())
+                line_str = line.rstrip()
+                self.log(line_str)
+                
+                if status_prefix:
+                    if "Processed file" in line_str:
+                        parts = line_str.split("Processed file")
+                        if len(parts) > 1:
+                            self.status(f"{status_prefix} : image {parts[1].strip()}")
+                    elif "Matching block" in line_str:
+                        parts = line_str.split("Matching block")
+                        if len(parts) > 1:
+                            self.status(f"{status_prefix} : bloc {parts[1].strip()}")
+                    elif "Registering image" in line_str:
+                        parts = line_str.split("Registering image")
+                        if len(parts) > 1:
+                            img_info = parts[1].split('(')[0].strip()
+                            self.status(f"{status_prefix} : ajout image {img_info}")
+                    elif "Bundle adjustment report" in line_str:
+                        self.status(f"{status_prefix} : optimisation globale...")
+                    elif "Undistorting image" in line_str:
+                        parts = line_str.split("Undistorting image")
+                        if len(parts) > 1:
+                            self.status(f"{status_prefix} : image {parts[1].strip()}")
                 
             self._current_process.wait()
             
@@ -465,7 +513,7 @@ class ColmapEngine(BaseEngine):
             '--SiftExtraction.estimate_affine_shape', '1' if self.params.estimate_affine_shape else '0',
             '--SiftExtraction.domain_size_pooling', '1' if self.params.domain_size_pooling else '0',
         ]
-        return self.run_command(cmd, "Extraction des features")
+        return self.run_command(cmd, "Extraction des features", status_prefix="Analyse")
 
     def feature_matching(self, database_path):
         if self.params.matcher_type == 'sequential':
@@ -489,7 +537,7 @@ class ColmapEngine(BaseEngine):
             ]
             description = "Matching Exhaustif"
             
-        return self.run_command(cmd, description)
+        return self.run_command(cmd, description, status_prefix="Comparaison")
 
     def mapper(self, database_path, images_dir, sparse_dir):
         if self.params.use_glomap:
@@ -505,7 +553,7 @@ class ColmapEngine(BaseEngine):
             
             # Note: GLOMAP output structure might need verification, typically creates/uses sparse/0
             # If glomap fails due to missing binary it will be caught by run_command exception handler
-            return self.run_command(cmd, "Reconstruction 3D (GLOMAP)")
+            return self.run_command(cmd, "Reconstruction 3D (GLOMAP)", status_prefix="Reconstruction GLOMAP")
             
         else:
             # Standard COLMAP Mapper
@@ -522,7 +570,7 @@ class ColmapEngine(BaseEngine):
                 '--Mapper.ba_refine_extra_params', '1' if self.params.ba_refine_extra_params else '0',
                 '--Mapper.min_num_matches', str(self.params.min_num_matches),
             ]
-            return self.run_command(cmd, "Reconstruction 3D (COLMAP)")
+            return self.run_command(cmd, "Reconstruction 3D (COLMAP)", status_prefix="Reconstruction 3D")
 
     def image_undistorter(self, images_dir: str, sparse_dir: str, output_dir: str):
         input_path = Path(sparse_dir) / "0"
@@ -534,7 +582,7 @@ class ColmapEngine(BaseEngine):
             '--output_type', 'COLMAP',
             '--max_image_size', str(self.params.max_image_size),
         ]
-        return self.run_command(cmd, "Undistortion des images")
+        return self.run_command(cmd, "Undistortion des images", status_prefix="Correction optique")
 
     def create_brush_config(self, output_dir: Path, images_dir: Path, sparse_dir: Path):
         # Determine actual paths to use (Undistorted vs Original)
