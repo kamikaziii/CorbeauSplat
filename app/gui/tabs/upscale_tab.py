@@ -326,7 +326,7 @@ class UpscaleTab(QWidget):
             "enabled": self.chk_activate.isChecked(),
             "model_name": self.model_combo.currentText(),
             "tile": self.tile_spin.value(),
-            "scale_factor": self.get_scale_factor(),
+            "target_scale": self.get_scale_factor(),
             "face_enhance": self.face_enhance.isChecked(),
             "fp16": self.fp16_check.isChecked()
         }
