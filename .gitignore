@@ -27,6 +27,7 @@ config.json
 # IDE
 .idea/
 .vscode/
+.claude/
 
 # Project Specific (Cleanup)
 target/
