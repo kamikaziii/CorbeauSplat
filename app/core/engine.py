@@ -59,109 +59,129 @@ class ColmapEngine(BaseEngine):
     def run(self):
         """Exécute le pipeline complet"""
         try:
-            # Création de la structure Projet
-            # [Output] / [ProjectName] / [images, checkpoints, sparse, dense]
-            project_dir = self.output_path / self.project_name
-            images_dir = project_dir / "images"
-            checkpoints_dir = project_dir / "checkpoints"
+            # 1. Validation and Directory Setup
+            setup_result = self._validate_and_setup_paths()
+            if not setup_result: return False, "Erreur de validation des chemins"
+            project_dir, images_dir, checkpoints_dir = setup_result
             
-            project_dir.mkdir(parents=True, exist_ok=True)
-            images_dir.mkdir(parents=True, exist_ok=True)
-            checkpoints_dir.mkdir(parents=True, exist_ok=True)
-            
-            self.log(f"Préparation du projet dans : {project_dir}")
-            
-            # Validation Input
-            raw_input = str(self.input_path)
-            if "|" in raw_input:
-                first_path = Path(raw_input.split("|")[0].strip())
-                if not first_path.exists():
-                     return False, f"Entrée introuvable: {first_path}"
-            else:
-                if not self.input_path.exists():
-                     return False, f"Entrée introuvable: {self.input_path}"
+            # 2. Preparation Input (Extraction/Copie, Upscale, Normalize)
+            if not self._process_input(project_dir, images_dir):
+                if self.is_cancelled(): return False, tr("USER_CANCELLED")
+                return False, "Erreur lors de la preparation de l'entree"
 
-            # 1. Preparation des Images (Extraction ou Copie)
-            self.status(tr("status_prep_images", "Préparation des visuels..."))
-            if not self._prepare_images(images_dir):
-                return False, "Echec preparation images"
-            
-            # --- UPSCALE STEP ---
-            upscale_conf = getattr(self, 'upscale_config', None)
-            if upscale_conf and upscale_conf.get("active", False):
-                self.status(tr("status_upscaling", "Upscaling des images..."))
-                if not self._run_upscale(project_dir, images_dir):
-                    return False, "Echec Upscale"
-
-            # --- RESOLUTION NORMALIZATION ---
-            if not self._check_and_normalize_resolution(images_dir):
-                if self.is_cancelled():
-                    return False, tr("USER_CANCELLED")
-                return False, "Échec normalisation résolution"
-
-            # Structure de dossiers
-            database_path = project_dir / "database.db"
-            sparse_dir = project_dir / "sparse"
-            sparse_dir.mkdir(exist_ok=True)
-            
-            self.progress(25)
-            
-            # 1. Feature Extraction
-            if self.is_cancelled(): return False, tr("USER_CANCELLED")
-            
-            self.status(tr("status_feature_extraction", "Analyse des images en cours..."))    
-            if not self.feature_extraction(str(database_path), str(images_dir)):
-                if self.is_cancelled(): return False, tr("USER_CANCELLED")
-                return False, "Échec extraction features"
-                
-            self.progress(50)
-            
-            # 2. Feature Matching
-            if self.is_cancelled(): return False, tr("USER_CANCELLED")
-            
-            self.status(tr("status_feature_matching", "Recherche des points communs..."))
-            if not self.feature_matching(str(database_path)):
-                if self.is_cancelled(): return False, tr("USER_CANCELLED")
-                return False, "Échec matching"
-                
-            self.progress(75)
-            
-            # 3. Reconstruction
-            if self.is_cancelled(): return False, tr("USER_CANCELLED")
-            
-            self.status(tr("status_reconstruction", "Création de la scène 3D..."))
-            if not self.mapper(str(database_path), str(images_dir), str(sparse_dir)):
-                if self.is_cancelled(): return False, tr("USER_CANCELLED")
-                return False, "Échec reconstruction"
-                
-            self.progress(90)
-            
-            # 4. Image Undistortion (Optionnel)
-            if self.params.undistort_images:
-                if self.is_cancelled(): return False, tr("USER_CANCELLED")
-                    
-                dense_dir = project_dir / "dense"
-                dense_dir.mkdir(exist_ok=True)
-                
-                self.status(tr("status_undistorting", "Correction optique des images..."))
-                if not self.image_undistorter(str(images_dir), str(sparse_dir), str(dense_dir)):
-                    if self.is_cancelled(): return False, "Arrete par l'utilisateur"
-                    return False, "Echec undistortion"
-                    
-            self.progress(95)
-            
-            # Configuration Brush
-            if not self.is_cancelled():
-                self.status(tr("status_ready", "Traitement terminé !"))
-                self.create_brush_config(project_dir, images_dir, sparse_dir)
-                self.progress(100)
-                return True, f"Dataset cree: {project_dir}"
-            else:
-                return False, "Arrete par l'utilisateur"
+            # 3. Pipeline COLMAP (Features, Matching, Mapper, Undistort)
+            pipeline_result, msg = self._run_reconstruction_pipeline(project_dir, images_dir)
+            return pipeline_result, msg
             
         except Exception as e:
             if self.is_cancelled(): return False, "Arrete par l'utilisateur"
             return False, str(e)
+
+    def _validate_and_setup_paths(self):
+        # [AUDIT] OWASP-A01 : Path Traversal prevention
+        safe_output = self.validate_path(str(self.output_path))
+        if not safe_output:
+            self.log("Chemin de sortie non sécurisé")
+            return None
+        self.output_path = safe_output
+        
+        if ".." in self.project_name or "/" in self.project_name or "\\" in self.project_name:
+            self.log("Nom de projet invalide")
+            return None
+
+        project_dir = self.output_path / self.project_name
+        images_dir = project_dir / "images"
+        checkpoints_dir = project_dir / "checkpoints"
+        
+        project_dir.mkdir(parents=True, exist_ok=True)
+        images_dir.mkdir(parents=True, exist_ok=True)
+        checkpoints_dir.mkdir(parents=True, exist_ok=True)
+        
+        self.log(f"Préparation du projet dans : {project_dir}")
+        
+        raw_input = str(self.input_path)
+        if "|" in raw_input:
+            self.log("Validation de multiples chemins d'entree...")
+            for p in raw_input.split("|"):
+                if not self.validate_path(p.strip()):
+                    self.log(f"Chemin d'entrée non sécurisé : {p}")
+                    return None
+            
+            first_path = Path(raw_input.split("|")[0].strip())
+            if not first_path.exists():
+                self.log(f"Entrée introuvable: {first_path}")
+                return None
+        else:
+            if not self.validate_path(raw_input):
+                 self.log(f"Chemin d'entrée non sécurisé: {raw_input}")
+                 return None
+            if not self.input_path.exists():
+                 self.log(f"Entrée introuvable: {self.input_path}")
+                 return None
+
+        return project_dir, images_dir, checkpoints_dir
+
+    def _process_input(self, project_dir, images_dir):
+        self.status(tr("status_prep_images", "Préparation des visuels..."))
+        if not self._prepare_images(images_dir):
+            return False
+        
+        upscale_conf = getattr(self, 'upscale_config', None)
+        if upscale_conf and upscale_conf.get("active", False):
+            self.status(tr("status_upscaling", "Upscaling des images..."))
+            if not self._run_upscale(project_dir, images_dir):
+                return False
+
+        if not self._check_and_normalize_resolution(images_dir):
+            return False
+            
+        return True
+
+    def _run_reconstruction_pipeline(self, project_dir, images_dir):
+        database_path = project_dir / "database.db"
+        sparse_dir = project_dir / "sparse"
+        sparse_dir.mkdir(exist_ok=True)
+        
+        self.progress(25)
+        
+        if self.is_cancelled(): return False, tr("USER_CANCELLED")
+        self.status(tr("status_feature_extraction", "Analyse des images en cours..."))    
+        if not self.feature_extraction(str(database_path), str(images_dir)):
+            return False, "Échec extraction features"
+            
+        self.progress(50)
+        
+        if self.is_cancelled(): return False, tr("USER_CANCELLED")
+        self.status(tr("status_feature_matching", "Recherche des points communs..."))
+        if not self.feature_matching(str(database_path)):
+            return False, "Échec matching"
+            
+        self.progress(75)
+        
+        if self.is_cancelled(): return False, tr("USER_CANCELLED")
+        self.status(tr("status_reconstruction", "Création de la scène 3D..."))
+        if not self.mapper(str(database_path), str(images_dir), str(sparse_dir)):
+            return False, "Échec reconstruction"
+            
+        self.progress(90)
+        
+        if self.params.undistort_images:
+            if self.is_cancelled(): return False, tr("USER_CANCELLED")
+            dense_dir = project_dir / "dense"
+            dense_dir.mkdir(exist_ok=True)
+            self.status(tr("status_undistorting", "Correction optique des images..."))
+            if not self.image_undistorter(str(images_dir), str(sparse_dir), str(dense_dir)):
+                return False, "Echec undistortion"
+                
+        self.progress(95)
+        
+        if not self.is_cancelled():
+            self.status(tr("status_ready", "Traitement terminé !"))
+            self.create_brush_config(project_dir, images_dir, sparse_dir)
+            self.progress(100)
+            return True, f"Dataset cree: {project_dir}"
+            
+        return False, "Arrete par l'utilisateur"
 
     def _prepare_images(self, images_dir: Path):
         """Gère l'extraction vidéo ou la copie d'images"""
@@ -377,7 +397,7 @@ class ColmapEngine(BaseEngine):
         return True
 
     def extract_frames_from_video(self, video_path: str, images_dir: Path, prefix=None):
-        """Extraction vidéo optimisée"""
+        """Extraction vidéo optimisée via Template Method"""
         base_name = Path(video_path).stem
         self.log(f"\n{'='*60}\nExtraction frames: {Path(video_path).name}\n{'='*60}")
         images_dir.mkdir(parents=True, exist_ok=True)
@@ -399,96 +419,69 @@ class ColmapEngine(BaseEngine):
             str(output_pattern)
         ])
         
+        def _ffmpeg_parser(line_str):
+            if 'frame=' in line_str or 'error' in line_str.lower():
+                self.log(line_str)
+                if 'frame=' in line_str:
+                    try:
+                        f_num = line_str.split('frame=')[1].strip().split()[0]
+                        self.status(f"Extraction {base_name} : image {f_num}")
+                    except:
+                        pass
+                        
         try:
-            self._current_process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1
-            )
-            
-            for line in self._current_process.stdout:
-                if self.is_cancelled():
-                    self._current_process.terminate()
-                    return None
-                line_str = line.rstrip()
-                if 'frame=' in line_str or 'error' in line_str.lower():
-                    self.log(line_str)
-                    if 'frame=' in line_str:
-                        try:
-                            f_num = line_str.split('frame=')[1].strip().split()[0]
-                            self.status(f"Extraction {base_name} : image {f_num}")
-                        except:
-                            pass
-            
-            self._current_process.wait()
-            
+            returncode = self._execute_command(cmd, line_callback=_ffmpeg_parser)
             if self.is_cancelled(): return None
-                
-            if self._current_process.returncode == 0:
+            
+            if returncode == 0:
                 num_frames = len([f for f in images_dir.iterdir() if f.suffix == '.jpg'])
                 self.log(f"{num_frames} frames extraites")
                 return True
             else:
                 self.log(f"Erreur lors de l'extraction")
                 return None
-                
-        except FileNotFoundError:
-            self.log("ffmpeg non trouve. Installez avec: brew install ffmpeg")
-            return False
         except Exception as e:
             self.log(f"Erreur: {str(e)}")
             return False
-        finally:
-            self._current_process = None
 
     def run_command(self, cmd, description, status_prefix=None):
-        """Exécute une commande avec support d'interruption"""
+        """Exécute une commande via Template Method centralisée"""
         self.log(f"\n{'='*60}\n{description}\n{'='*60}")
         
+        env = os.environ.copy()
+        if self.is_silicon:
+            env['OMP_NUM_THREADS'] = str(self.num_threads)
+            env['VECLIB_MAXIMUM_THREADS'] = str(self.num_threads)
+            env['OPENBLAS_NUM_THREADS'] = str(self.num_threads)
+            
+        def _colmap_parser(line_str):
+            self.log(line_str)
+            if status_prefix:
+                if "Processed file" in line_str:
+                    parts = line_str.split("Processed file")
+                    if len(parts) > 1:
+                        self.status(f"{status_prefix} : image {parts[1].strip()}")
+                elif "Matching block" in line_str:
+                    parts = line_str.split("Matching block")
+                    if len(parts) > 1:
+                        self.status(f"{status_prefix} : bloc {parts[1].strip()}")
+                elif "Registering image" in line_str:
+                    parts = line_str.split("Registering image")
+                    if len(parts) > 1:
+                        img_info = parts[1].split('(')[0].strip()
+                        self.status(f"{status_prefix} : ajout image {img_info}")
+                elif "Bundle adjustment report" in line_str:
+                    self.status(f"{status_prefix} : optimisation globale...")
+                elif "Undistorting image" in line_str:
+                    parts = line_str.split("Undistorting image")
+                    if len(parts) > 1:
+                        self.status(f"{status_prefix} : image {parts[1].strip()}")
+                        
         try:
-            env = os.environ.copy()
-            if self.is_silicon:
-                env['OMP_NUM_THREADS'] = str(self.num_threads)
-                env['VECLIB_MAXIMUM_THREADS'] = str(self.num_threads)
-                env['OPENBLAS_NUM_THREADS'] = str(self.num_threads)
-                
-            self._current_process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1, env=env
-            )
-            
-            for line in self._current_process.stdout:
-                if self.is_cancelled():
-                    self._current_process.terminate()
-                    return False
-                line_str = line.rstrip()
-                self.log(line_str)
-                
-                if status_prefix:
-                    if "Processed file" in line_str:
-                        parts = line_str.split("Processed file")
-                        if len(parts) > 1:
-                            self.status(f"{status_prefix} : image {parts[1].strip()}")
-                    elif "Matching block" in line_str:
-                        parts = line_str.split("Matching block")
-                        if len(parts) > 1:
-                            self.status(f"{status_prefix} : bloc {parts[1].strip()}")
-                    elif "Registering image" in line_str:
-                        parts = line_str.split("Registering image")
-                        if len(parts) > 1:
-                            img_info = parts[1].split('(')[0].strip()
-                            self.status(f"{status_prefix} : ajout image {img_info}")
-                    elif "Bundle adjustment report" in line_str:
-                        self.status(f"{status_prefix} : optimisation globale...")
-                    elif "Undistorting image" in line_str:
-                        parts = line_str.split("Undistorting image")
-                        if len(parts) > 1:
-                            self.status(f"{status_prefix} : image {parts[1].strip()}")
-                
-            self._current_process.wait()
-            
+            returncode = self._execute_command(cmd, env=env, line_callback=_colmap_parser)
             if self.is_cancelled(): return False
                 
-            if self._current_process.returncode == 0:
+            if returncode == 0:
                 self.log(f"{description} termine")
                 return True
             else:
@@ -498,8 +491,6 @@ class ColmapEngine(BaseEngine):
         except FileNotFoundError:
             self.log(f"COLMAP non trouve. Installez avec: brew install colmap")
             return False
-        finally:
-            self._current_process = None
 
     def feature_extraction(self, database_path, images_dir):
         cmd = [
@@ -610,19 +601,17 @@ class ColmapEngine(BaseEngine):
         self.log(f"Configuration Brush créée: {config_path}")
         
     def stop(self):
-        """Arrête le processus en cours"""
-        if self._current_process and self._current_process.poll() is None:
-            self.log("\nArret demande - Terminaison du processus...")
-            try:
-                self._current_process.terminate()
-                self._current_process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self._current_process.kill()
-                self._current_process.wait()
+        """Arrête le processus en cours via Template Method"""
+        super().stop()
 
     @staticmethod
     def delete_project_content(target_path: Path):
         """Supprime le contenu d'un dossier de projet de manière sécurisée (Corbeille)"""
+        # [AUDIT] OWASP-A01 : Empêche la suppression du dossier racine / de tout le disque en cas d'erreur de variable
+        safe_path = Path(target_path).resolve()
+        if str(safe_path) == "/" or str(safe_path) == str(Path.home()):
+             return False, "Tentative de suppression critique bloquée par sécurité."
+
         if not target_path.exists():
             return False, "Le dossier n'existe pas"
             
@@ -640,4 +629,3 @@ class ColmapEngine(BaseEngine):
             return True, "Contenu mis à la corbeille"
         except Exception as e:
             return False, str(e)
-

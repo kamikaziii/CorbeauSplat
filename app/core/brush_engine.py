@@ -17,6 +17,13 @@ class BrushEngine(BaseEngine):
         Lance l'entraînement Brush.
         params: dict of training parameters
         """
+        # [AUDIT] OWASP-A01 : validation des chemins en entrée/sortie pour éviter le Path Traversal
+        safe_input = self.validate_path(input_path)
+        safe_output = self.validate_path(output_path)
+        
+        if not safe_input or not safe_output:
+            raise ValueError("Chemins invalides ou non sécurisés détectés.")
+
         if not self.brush_bin:
             raise RuntimeError("Exécutable 'brush' non trouvé.")
             
@@ -24,7 +31,7 @@ class BrushEngine(BaseEngine):
         cmd = [self.brush_bin]
         
         # Standard Options
-        cmd.extend(["--export-path", str(output_path)])
+        cmd.extend(["--export-path", str(safe_output)])
         
         if params.get("total_steps"):
             cmd.extend(["--total-steps", str(params["total_steps"])])
@@ -45,33 +52,31 @@ class BrushEngine(BaseEngine):
             env["WGPU_BACKEND"] = "vulkan"
             env["WGPU_POWER_PREF"] = "high_performance"
 
-        # Custom arguments (sanitized via shlex in caller or here)
+        # [AUDIT] OWASP-A03 : Abandon de shlex brut, filtrage strict via liste blanche 
+        # pour éviter la command injection (ex: écrasement de binaires ou flags inattendus)
         custom_args = params.get("custom_args")
         if custom_args:
-            import shlex
-            cmd.extend(shlex.split(custom_args))
+            allowed_flags = {"--save-iterations", "--log-level", "--test-split"}
+            args_list = custom_args.split()
+            safe_args = []
+            
+            i = 0
+            while i < len(args_list):
+                arg = args_list[i]
+                if arg in allowed_flags:
+                    safe_args.append(arg)
+                    # Si c'est un paramètre qui prend une valeur, on l'ajoute
+                    if i + 1 < len(args_list) and not args_list[i+1].startswith("--"):
+                        safe_args.append(args_list[i+1])
+                        i += 1
+                else:
+                    self.log(f"Avertissement de sécurité: paramètre non autorisé ignoré ({arg})")
+                i += 1
+            cmd.extend(safe_args)
             
         # Positional argument: source path
-        cmd.append(str(input_path))
+        cmd.append(str(safe_input))
         
-        # Lancement
-        print(f"Lancement Brush: {' '.join(map(str, cmd))}")
-        
-        kwargs = {}
-        if sys.platform != "win32":
-            kwargs['preexec_fn'] = os.setsid
-            
-        self.process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines=True,
-            env=env,
-            **kwargs
-        )
-        
-        return self.process
-
-    def stop(self):
-        """Arrête le processus en cours"""
-        self._kill_process(self.process)
+        # [AUDIT] GoF-Template Method : Délégation au runner
+        self.log(f"Lancement Brush: {' '.join(cmd)}")
+        return self._execute_command(cmd, env=env)

@@ -19,7 +19,6 @@ class FourDGSEngine(BaseEngine):
         
     def check_nerfstudio(self):
         """Vérifie si ns-process-data est disponible"""
-        # ns-process-data est souvent un script python/entrypoint
         return shutil.which("ns-process-data") is not None
 
     def extract_frames(self, video_path, output_dir, fps=5):
@@ -40,17 +39,8 @@ class FourDGSEngine(BaseEngine):
             str(out_p / "%05d.jpg")
         ])
         
-        try:
-            # Videotoolbox sur mac si possible ? 
-            # ffmpeg gestion auto souvent ok, mais on peut tenter acceleration
-            # Pour l'extraction jpg, le CPU est souvent limitant vs decode.
-            # On reste simple pour la compatibilité.
-            
-            subprocess.check_call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return True
-        except subprocess.CalledProcessError as e:
-            self.log(f"Erreur extraction {video_path}: {e}")
-            return False
+        # [AUDIT] Template Method : Délégation à _execute_command centralisé
+        return self._execute_command(cmd) == 0
 
     def run_colmap(self, dataset_root):
         """Lance le pipeline COLMAP : Feature Extractor -> Matcher -> Mapper"""
@@ -64,7 +54,7 @@ class FourDGSEngine(BaseEngine):
 
         # 1. Feature Extraction
         self.log("--- COLMAP: Feature Extraction ---")
-        self.status(tr("status_feature_extraction", "Extraction des features (COLMAP)..."))
+        self.status("Extraction des features (COLMAP)...")
         cmd_extract = [
             self.colmap, "feature_extractor",
             "--database_path", str(db_path),
@@ -73,29 +63,20 @@ class FourDGSEngine(BaseEngine):
             "--ImageReader.single_camera", "1" 
         ]
         
-        if self._run_cmd(cmd_extract) != 0: return False
-        
-        # 2. Sequential Matching (Souvent mieux pour vidéo ?) 
-        # Ou Exhaustive si peu de cams ?
-        # Pour 4DGS, on a souvent des caméras fixes qui filment une scène qui bouge.
-        # Exhaustive est plus sûr si < 50-100 images. Mais ici on a des milliers de frames ?
-        # Non, on traite les CAMERAS.
-        # En 4DGS "Nerfstudio format", on a besoin des poses des caméras.
-        # On extrait souvent la première frame de chaque vidéo pour caler la géométrie, ou on utilise tout ?
-        # Pour faire simple : Exhaustive Matcher est robuste.
+        if self._execute_command(cmd_extract) != 0: return False
         
         self.log("--- COLMAP: Feature Matching ---")
-        self.status(tr("status_feature_matching", "Matching des features..."))
+        self.status("Matching des features...")
         cmd_match = [
             self.colmap, "exhaustive_matcher",
             "--database_path", str(db_path),
         ]
 
-        if self._run_cmd(cmd_match) != 0: return False
+        if self._execute_command(cmd_match) != 0: return False
         
         # 3. Mapper
         self.log("--- COLMAP: Mapper (Sparse Reconstruction) ---")
-        self.status(tr("status_reconstruction", "Reconstruction 3D (Mapper)..."))
+        self.status("Reconstruction 3D (Mapper)...")
         cmd_mapper = [
             self.colmap, "mapper",
             "--database_path", str(db_path),
@@ -103,32 +84,14 @@ class FourDGSEngine(BaseEngine):
             "--output_path", str(sparse_path)
         ]
         
-        # Threads
         threads = str(get_optimal_threads())
         cmd_mapper.append(f"--Mapper.num_threads={threads}")
 
-        if self._run_cmd(cmd_mapper) != 0: return False
+        if self._execute_command(cmd_mapper) != 0: return False
         
         return True
 
     def process_dataset(self, videos_dir, output_dir, fps=5):
-        """
-        Orchestre tout le processus :
-        1. Scan videos
-        2. Extract frames -> output/images/cam_xx
-        3. Colmap (si demandé, ou ns-process-data le fait ?)
-        
-        NOTE: ns-process-data video fait tout (ffmpeg + colmap).
-        Mais ici on a du MULTI-VIDEO (Multi-view).
-        ns-process-data supporte-t-il le multi-video input ?
-        
-        Approche CorbeauSplat : On prépare les données 'images' et on laisse Colmap faire les poses,
-        puis on formate.
-        
-        Pour simplifier : On va extraire les images nous-mêmes pour avoir le contrôle,
-        puis lancer COLMAP.
-        """
-        
         self.log(f"Scan du dossier : {videos_dir}")
         supported_ext = (".mp4", ".mov", ".avi", ".mkv")
         videos_path = Path(videos_dir)
@@ -146,29 +109,20 @@ class FourDGSEngine(BaseEngine):
         # 1. Extraction
         for idx, vid_path in enumerate(videos):
             if self.stop_requested: return False
-            cam_name = f"cam_{idx:02d}" # cam_00, cam_01...
+            cam_name = f"cam_{idx:02d}"
             cam_dir = images_root / cam_name
             
             self.log(f"Extraction {vid_path.name} -> {cam_name} ({fps} fps)...")
-            self.status(f"{tr('status_extracting_frames', 'Extraction des frames')} ({vid_path.name})...")
+            self.status(f"Extraction des frames ({vid_path.name})...")
             if not self.extract_frames(vid_path, cam_dir, fps):
                 return False
                 
         self.log("Extraction terminée.")
         
-        # 2. COLMAP
-        # Pour du 4DGS multi-view, on veut les poses des caméras.
-        # On peut lancer COLMAP sur TOUTES les images (très lourd) ou juste sur un subset (ex: frame 0 de chaque cam) pour fixer les poses ?
-        # Pour l'instant, faisons simple : COLMAP sur tout le dossier images (recursive ?)
-        # Colmap ne gère pas recursive par défaut sans config spécifique.
-        # Alternative : ns-process-data gère ça très bien.
-        
-        # Si nerfstudio est là, utilisons ns-process-data images
         if self.check_nerfstudio():
             self.log("ns-process-data détecté. Lancement du processing Nerfstudio...")
-            self.status(tr("status_nerfstudio", "Traitement Nerfstudio en cours..."))
+            self.status("Traitement Nerfstudio en cours...")
             
-            # ns-process-data images --data output_dir/images --output-dir output_dir
             cmd_ns = [
                 "ns-process-data", "images",
                 "--data", str(images_root),
@@ -176,49 +130,11 @@ class FourDGSEngine(BaseEngine):
                 "--verbose"
             ]
             
-            # Options pour aider colmap
-            # Ajouter --skip-colmap si on voulait le faire nous meme, mais ns le fait bien.
-            # On va laisser ns faire colmap.
-            
-            if self._run_cmd(cmd_ns) != 0:
+            if self._execute_command(cmd_ns) != 0:
                 self.log("Echec ns-process-data.")
                 return False
             
             return True
         else:
             self.log("Nerfstudio non trouvé. Lancement mode dégradé (COLMAP manuel uniquement).")
-            # Fallback : on run colmap nous même, mais on n'aura pas le transforms.json
             return self.run_colmap(output_dir)
-
-    def _run_cmd(self, cmd):
-        if self.stop_requested: return -1
-        self.log(f"Exec: {' '.join(map(str, cmd))}")
-        try:
-            env = os.environ.copy()
-            if is_apple_silicon():
-                threads = str(get_optimal_threads())
-                env["OMP_NUM_THREADS"] = threads
-                env["VECLIB_MAXIMUM_THREADS"] = threads
-                env["OPENBLAS_NUM_THREADS"] = threads
-                
-            process = subprocess.Popen(
-                cmd, 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.STDOUT, 
-                text=True,
-                env=env
-            )
-            
-            for line in process.stdout:
-                if self.stop_requested:
-                    process.terminate()
-                    process.wait()
-                    return -1
-                stripped = line.strip()
-                if stripped:
-                    self.log(stripped)
-
-            return process.wait()
-        except Exception as e:
-            self.log(f"Exception: {e}")
-            return -1

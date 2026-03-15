@@ -184,6 +184,26 @@ class SuperSplatTab(QWidget):
             
         webbrowser.open(url)
         
+    def get_state(self):
+        """Returns the full state for persistence"""
+        return {
+            "splat_port": self.splat_port.value(),
+            "data_port": self.data_port.value(),
+            "input_path": self.input_path.text(),
+            "no_ui": self.chk_no_ui.isChecked(),
+            "cam_pos": self.cam_pos.text(),
+            "cam_rot": self.cam_rot.text()
+        }
+
+    def set_state(self, state):
+        if not state: return
+        if "splat_port" in state: self.splat_port.setValue(state["splat_port"])
+        if "data_port" in state: self.data_port.setValue(state["data_port"])
+        if "input_path" in state: self.input_path.setText(state["input_path"])
+        if "no_ui" in state: self.chk_no_ui.setChecked(state["no_ui"])
+        if "cam_pos" in state: self.cam_pos.setText(state["cam_pos"])
+        if "cam_rot" in state: self.cam_rot.setText(state["cam_rot"])
+
     def closeEvent(self, event):
         self.stop_server()
         super().closeEvent(event)

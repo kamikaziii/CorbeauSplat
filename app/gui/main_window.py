@@ -31,10 +31,15 @@ class ColmapGUI(QMainWindow):
         self.worker = None
         self.brush_worker = None
         self.sharp_worker = None
+        
+        # [AUDIT] SRP : Extraction de la gestion de session
+        from app.gui.managers import SessionManager
+        self.session_manager = SessionManager(self)
+        
         self.init_ui()
         set_dark_theme(QApplication.instance())
         add_language_observer(self.retranslate_ui)
-        self.load_session_state()
+        self.session_manager.load()
         
 
 
@@ -477,175 +482,20 @@ class ColmapGUI(QMainWindow):
             QMessageBox.warning(self, tr("msg_error"), f"Erreur Sharp:\n{message}")
 
     def restart_application(self):
-        """Redémarre l'application de manière plus robuste via execv"""
-        try:
-            self.save_session_state()
-        except Exception as e:
-            print(f"Error saving session before restart: {e}")
-
-        import subprocess
-        root_dir = resolve_project_root()
-        python = sys.executable
-        main_py = root_dir / "main.py"
-
-        # Si un binaire engine est manquant (ex: après réinstall Brush),
-        # on réinjecte l'étape setup_dependencies --startup avant de relancer.
-        engines_dir = root_dir / "engines"
-        needs_setup = any([
-            not (engines_dir / "brush").exists() and (engines_dir / "brush.version").exists() is False,
-            not (engines_dir / "brush").exists(),
-        ])
-
-        if needs_setup and sys.platform != "win32":
-            print("Reinstall detected: running setup before relaunch...")
-            extra_argv = [a for a in sys.argv[1:] if a not in ("--gui",)]
-            main_args = " ".join(f'"{a}"' for a in extra_argv)
-            cmd = (
-                f'sleep 1 && '
-                f'"{python}" -m app.scripts.setup_dependencies --startup && '
-                f'"{python}" "{main_py}" {main_args}'
-            )
-            subprocess.Popen(cmd, shell=True, cwd=str(root_dir), start_new_session=True)
-            QApplication.quit()
-            sys.exit(0)
-
-        # Relance normale
-        args = [python, str(main_py)] + sys.argv[1:]
-        print(f"Relaunching via execv: {args}")
-
-        if sys.platform != "win32":
-            try:
-                os.execv(python, args)
-            except Exception as e:
-                print(f"execv failed: {e}. Falling back to Popen.")
-
-        kwargs = {}
-        if sys.platform != "win32":
-            kwargs["start_new_session"] = True
-
-        subprocess.Popen(args, cwd=str(root_dir), **kwargs)
-        QApplication.quit()
-        sys.exit(0)
+        """Redémarre l'application de manière plus robuste (SRP)"""
+        from app.gui.managers import AppLifecycle
+        AppLifecycle.restart(save_callback=lambda: self.session_manager.save(immediate=True))
         
     def reset_factory(self, deep=False):
-        """Supprime les venvs et relance l'installation/application"""
-        import subprocess
-        
-        QApplication.quit()
-        
-        # Obtenir le chemin de run.command (supposé à la racine)
-        root_dir = resolve_project_root()
-            
-        run_cmd = root_dir / "run.command"
-        
-        # Dossiers à supprimer systématiquement (venvs)
-        to_delete = [
-            root_dir / ".venv",
-            root_dir / ".venv_sharp",
-            root_dir / ".venv_360"
-        ]
-        
-        if deep:
-            to_delete.append(root_dir / "engines")
-            to_delete.append(root_dir / "config.json")
-            # Nettoyer aussi les fichiers de conflit de synchro éventuels
-            for p in root_dir.glob("config.sync-conflict-*"):
-                to_delete.append(p)
-        
-        delete_cmd = " ".join([f'"{str(p)}"' for p in to_delete])
-        
-        print(f"Reset Factory {'DEEP' if deep else 'LIGHT'} initie sur: {root_dir}")
-        print(f"Commande relance: {run_cmd}")
-        
-        # On lance une commande shell détachée qui va:
-        # 1. Attendre que nous quittions (sleep 2)
-        # 2. Supprimer les dossiers venv (et engines/config si deep)
-        # 3. Relancer run.command
-        cmd = f"sleep 2 && rm -rf {delete_cmd} && \"{run_cmd}\" &"
-        
-        subprocess.Popen(cmd, shell=True, cwd=str(root_dir))
-        sys.exit(0)
+        """Supprime les venvs et relance l'installation/application (SRP)"""
+        from app.gui.managers import AppLifecycle
+        AppLifecycle.reset_factory(deep)
 
-    # --- Session Persistence ---
-
-    def get_session_file(self) -> Path:
-        """Retourne le chemin vers le fichier de session (config.json)"""
-        return resolve_project_root() / "config.json"
-
-    def save_session_state(self):
-        """Sauvegarde l'état de l'application de manière dynamique"""
-        state = {
-            "language": self.config_tab.combo_lang.currentData(),
-        }
-        
-        # Collecter l'état de chaque onglet capable de le fournir
-        tab_mapping = {
-            "config": self.config_tab,
-            "colmap_params": self.params_tab,
-            "brush_params": self.brush_tab,
-            "sharp_params": self.sharp_tab,
-            "upscale_params": self.upscale_tab,
-            "extractor_360_params": self.extractor_360_tab,
-            "four_dgs_params": self.four_dgs_tab,
-        }
-        
-        for key, tab in tab_mapping.items():
-            try:
-                if hasattr(tab, 'get_state'):
-                    state[key] = tab.get_state()
-                elif hasattr(tab, 'get_params'):
-                    state[key] = tab.get_params()
-                    # Si c'est un objet ColmapParams, on le convertit
-                    if hasattr(state[key], 'to_dict'):
-                        state[key] = state[key].to_dict()
-            except Exception as e:
-                print(f"Erreur lors de la collecte de l'état pour '{key}': {e}")
-
-        try:
-            with open(self.get_session_file(), 'w') as f:
-                json.dump(state, f, indent=2)
-        except Exception as e:
-            print(f"Erreur sauvegarde session: {e}")
-
-    def load_session_state(self):
-        """Charge l'état précédent de manière dynamique"""
-        session_file = self.get_session_file()
-        if not session_file.exists():
-            return
-            
-        try:
-            with open(session_file, 'r') as f:
-                state = json.load(f)
-                
-            tab_mapping = {
-                "config": self.config_tab,
-                "colmap_params": self.params_tab,
-                "brush_params": self.brush_tab,
-                "sharp_params": self.sharp_tab,
-                "upscale_params": self.upscale_tab,
-                "extractor_360_params": self.extractor_360_tab,
-                "four_dgs_params": self.four_dgs_tab,
-            }
-            
-            for key, tab in tab_mapping.items():
-                if key in state:
-                    try:
-                        if hasattr(tab, 'set_state'):
-                            tab.set_state(state[key])
-                        elif hasattr(tab, 'set_params'):
-                            # Cas spécial ColmapParams
-                            if key == "colmap_params":
-                                tab.set_params(ColmapParams.from_dict(state[key]))
-                            else:
-                                tab.set_params(state[key])
-                    except Exception as e:
-                        print(f"Erreur lors du chargement de l'état pour '{key}': {e}")
-
-        except Exception as e:
-            print(f"Erreur chargement session: {e}")
+    # --- Session Persistence Externalisée ---
+    # Gérée par SessionManager
 
     def closeEvent(self, event):
         """Appelé à la fermeture de la fenêtre"""
-        self.save_session_state()
+        self.session_manager.save(immediate=True)
         event.accept()
 

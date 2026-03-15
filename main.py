@@ -16,7 +16,7 @@ from app.gui.main_window import ColmapGUI
 
 def get_parser():
     """Configure and return the argument parser"""
-    parser = argparse.ArgumentParser(description=tr("cli_desc"))
+    parser = argparse.ArgumentParser(description=tr("cli_desc").replace("v0.8", "v0.9"))
     
     # GUI Mode
     parser.add_argument('--gui', action='store_true', help=tr("cli_gui_help"))

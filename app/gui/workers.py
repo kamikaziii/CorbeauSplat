@@ -4,15 +4,17 @@ import re
 from pathlib import Path
 from app.core.engine import ColmapEngine
 from app.core.brush_engine import BrushEngine
+from app.core.i18n import tr
 from app.gui.base_worker import BaseWorker
 from app.core.extractor_360_engine import Extractor360Engine
 
 class Extractor360Worker(BaseWorker):
     """Thread worker pour exécuter 360Extractor"""
 
-    def __init__(self, input_path, output_path, params):
+    def __init__(self, input_path, output_path, params, engine=None):
         super().__init__()
-        self.engine = Extractor360Engine()
+        # [AUDIT] DIP : Injection
+        self.engine = engine or Extractor360Engine(logger_callback=self.log_signal.emit)
         self.input_path = input_path
         self.output_path = output_path
         self.params = params
@@ -22,9 +24,9 @@ class Extractor360Worker(BaseWorker):
         super().stop()
 
     def run(self):
-        self.log_signal.emit("--- Démarrage 360Extractor ---")
+        self.log_signal.emit(tr("status_360_start", "--- Démarrage 360Extractor ---"))
         if not self.engine.is_installed():
-            self.finished_signal.emit(False, "360Extractor non installé.")
+            self.finished_signal.emit(False, tr("err_360_not_installed", "360Extractor non installé."))
             return
 
         # Use engine to construct/run instead of manual cmd construction
@@ -38,9 +40,9 @@ class Extractor360Worker(BaseWorker):
         )
         
         if success:
-            self.finished_signal.emit(True, "Extraction terminée avec succès.")
+            self.finished_signal.emit(True, tr("status_360_done", "Extraction terminée avec succès."))
         else:
-            self.finished_signal.emit(False, "Erreur lors de l'extraction.")
+            self.finished_signal.emit(False, tr("err_360_failed", "Erreur lors de l'extraction."))
 
     def parse_line(self, line):
         """Extraction naïve de la progression [XX%]"""
@@ -53,12 +55,13 @@ class Extractor360Worker(BaseWorker):
 class ColmapWorker(BaseWorker):
     """Thread worker pour exécuter COLMAP via le moteur"""
     
-    def __init__(self, params, input_path, output_path, input_type, fps, project_name="Untitled", upscale_params=None, extractor_360_params=None):
+    def __init__(self, params, input_path, output_path, input_type, fps, project_name="Untitled", upscale_params=None, extractor_360_params=None, engine=None):
         super().__init__()
         self.upscale_params = upscale_params
         self.extractor_360_params = extractor_360_params
-        self.ext_360 = None
-        self.engine = ColmapEngine(
+        self.extractor_engine = None
+        # [AUDIT] DIP : Injection
+        self.engine = engine or ColmapEngine(
             params, input_path, output_path, input_type, fps, project_name,
             logger_callback=self.log_signal.emit,
             progress_callback=self.progress_signal.emit,
@@ -67,8 +70,8 @@ class ColmapWorker(BaseWorker):
         )
         
     def stop(self):
-        if self.ext_360:
-            self.ext_360.stop()
+        if self.extractor_engine:
+            self.extractor_engine.stop()
         self.engine.stop()
         super().stop()
         
@@ -76,21 +79,21 @@ class ColmapWorker(BaseWorker):
         # 1. Check 360 Extractor
         if self.extractor_360_params and self.extractor_360_params.get("enabled", False):
             from app.core.extractor_360_engine import Extractor360Engine
-            self.ext_360 = Extractor360Engine()
+            self.extractor_engine = Extractor360Engine()
             
-            if not self.ext_360.is_installed():
-                self.log_signal.emit("ERREUR: 360 Extractor activé mais non installé.")
-                self.finished_signal.emit(False, "Dépendances 360 manquantes")
+            if not self.extractor_engine.is_installed():
+                self.log_signal.emit(tr("err_360_not_installed_colmap", "ERREUR: 360 Extractor activé mais non installé."))
+                self.finished_signal.emit(False, tr("err_360_missing", "Dépendances 360 manquantes"))
                 return
 
-            self.log_signal.emit("--- Démarrage 360 Extractor (Pré-traitement) ---")
+            self.log_signal.emit(tr("status_360_pre", "--- Démarrage 360 Extractor (Pré-traitement) ---"))
             
             # Output images to project/images
             images_dir = self.engine.project_path / "images"
             images_dir.mkdir(parents=True, exist_ok=True)
             
             # Run extraction
-            success = self.ext_360.run_extraction(
+            success = self.extractor_engine.run_extraction(
                 self.engine.input_path, # Video path
                 images_dir, # Output folder
                 self.extractor_360_params,
@@ -100,10 +103,10 @@ class ColmapWorker(BaseWorker):
             )
             
             if not success:
-                self.finished_signal.emit(False, "Echec de l'extraction 360.")
+                self.finished_signal.emit(False, tr("err_360_failed", "Echec de l'extraction 360."))
                 return
                 
-            self.log_signal.emit("Extraction 360 terminée. Passage à COLMAP...")
+            self.log_signal.emit(tr("status_360_colmap", "Extraction 360 terminée. Passage à COLMAP..."))
             
             self.engine.input_type = "images" 
             self.engine.input_path = images_dir
@@ -127,9 +130,10 @@ class ColmapWorker(BaseWorker):
 class BrushWorker(BaseWorker):
     """Thread worker pour exécuter Brush"""
     
-    def __init__(self, input_path, output_path, params):
+    def __init__(self, input_path, output_path, params, engine=None):
         super().__init__()
-        self.engine = BrushEngine()
+        # [AUDIT] DIP : Injection
+        self.engine = engine or BrushEngine(logger_callback=self.log_signal.emit)
         self.input_path = input_path
         self.output_path = output_path
         self.params = params
@@ -189,11 +193,11 @@ class BrushWorker(BaseWorker):
                 last_mtime = 0
                 if checkpoints_dir.exists():
                     self.log_signal.emit(f"Recherche de checkpoints dans {checkpoints_dir}...")
-                    for p in checkpoints_dir.rglob("*.ply"):
-                        mt = p.stat().st_mtime
+                    for ply_path in checkpoints_dir.rglob("*.ply"):
+                        mt = ply_path.stat().st_mtime
                         if mt > last_mtime:
                             last_mtime = mt
-                            latest_ply = p
+                            latest_ply = ply_path
                 
                 if latest_ply:
                     self.log_signal.emit(f"Checkpoint trouvé: {latest_ply.name}")
@@ -294,28 +298,11 @@ class BrushWorker(BaseWorker):
 
             # Construct CMD
             self.log_signal.emit("Lancement de la commande Brush...")
-            # Use refactored train method
-            process = self.engine.train(resolved_input, self.output_path, self.params)
+            # Use refactored train method (Template Method)
+            returncode = self.engine.train(resolved_input, self.output_path, self.params)
             
-            # Capture output from process
-            success = True
-            if process:
-                for line in process.stdout:
-                    if not self.is_running or self.isInterruptionRequested():
-                        self.log_signal.emit("Processus arrêté par l'utilisateur.")
-                        self.engine.stop()
-                        success = False
-                        break
-                    
-                    clean_line = line.strip()
-                    if clean_line:
-                        self.log_signal.emit(clean_line)
-                
-                process.wait()
-                if process.returncode != 0:
-                    success = False
-            else:
-                success = False
+            # Delegate handling to Template Method return logic
+            success = (returncode == 0)
             
             if success:
                 self.handle_ply_rename()
@@ -357,12 +344,12 @@ class BrushWorker(BaseWorker):
             nonlocal found_ply, last_mtime
             if not directory.exists(): return
             
-            for p in directory.iterdir():
-                if p.is_file() and p.suffix == '.ply' and p.name != ply_name:
-                    mt = p.stat().st_mtime
+            for file_path in directory.iterdir():
+                if file_path.is_file() and file_path.suffix == '.ply' and file_path.name != ply_name:
+                    mt = file_path.stat().st_mtime
                     if mt > last_mtime:
                         last_mtime = mt
-                        found_ply = p
+                        found_ply = file_path
 
         # 1. Check likely paths first
         for path in search_paths:
@@ -370,12 +357,12 @@ class BrushWorker(BaseWorker):
             
         # 2. If nothing found, fallback to walk
         if not found_ply:
-            for p in output_path.rglob("*.ply"):
-                if p.name != ply_name:
-                    mt = p.stat().st_mtime
+            for ply_file_path in output_path.rglob("*.ply"):
+                if ply_file_path.name != ply_name:
+                    mt = ply_file_path.stat().st_mtime
                     if mt > last_mtime:
                         last_mtime = mt
-                        found_ply = p
+                        found_ply = ply_file_path
 
         if found_ply:
             dest_path = output_path / ply_name
@@ -390,11 +377,12 @@ class BrushWorker(BaseWorker):
 class SharpWorker(BaseWorker):
     """Thread worker pour exécuter Apple ML Sharp"""
     
-    def __init__(self, input_path, output_path, params):
+    def __init__(self, input_path, output_path, params, engine=None):
         super().__init__()
         # On importe ici pour eviter les cycles si besoin, ou juste par proprete
         from app.core.sharp_engine import SharpEngine
-        self.engine = SharpEngine()
+        # [AUDIT] DIP : Injection
+        self.engine = engine or SharpEngine(logger_callback=self.log_signal.emit)
         self.input_path = input_path
         self.output_path = output_path
         self.params = params
@@ -410,7 +398,7 @@ class SharpWorker(BaseWorker):
                 from app.core.upscale_engine import UpscaleEngine
                 upscaler = UpscaleEngine(logger_callback=self.log_signal.emit)
                 if upscaler.is_installed():
-                    self.log_signal.emit("--- Upscale Image ---")
+                    self.log_signal.emit(tr("status_upscaling", "--- Upscale Image ---"))
                     input_path = Path(self.input_path)
                     output_path = Path(self.output_path)
                     if input_path.is_file():
@@ -420,44 +408,22 @@ class SharpWorker(BaseWorker):
                         model = upscaler.load_model()
                         if model and upscaler.upscale_image(input_path, upscaled_path, model):
                             self.input_path = str(upscaled_path)
-                            self.log_signal.emit("Upscale terminé. Lancement Sharp...")
+                            self.log_signal.emit(tr("status_upscale_done", "Upscale terminé. Lancement Sharp..."))
                         else:
-                            self.log_signal.emit("Echec Upscale. Utilisation image originale.")
+                            self.log_signal.emit(tr("err_upscale_failed", "Echec Upscale. Utilisation image originale."))
                     else:
                         self.log_signal.emit("Upscale de dossier pour Sharp non supporté dans cette version simple (TODO).")
                 else:
-                    self.log_signal.emit("Erreur: Upscale demandé mais non installé.")
+                    self.log_signal.emit(tr("err_upscale_missing", "Erreur: Upscale demandé mais non installé."))
             
             # Use refactored predict method
-            from app.core.i18n import tr
             self.status_signal.emit(tr("status_sharp", "Amélioration avec ML Sharp..."))
-            process = self.engine.predict(self.input_path, self.output_path, self.params)
             
-            success = True
-            if process:
-                for line in process.stdout:
-                    if not self.is_running or self.isInterruptionRequested():
-                        self.log_signal.emit("Processus arrêté par l'utilisateur.")
-                        self.engine.stop()
-                        success = False
-                        break
-                    
-                    clean_line = line.strip()
-                    if clean_line:
-                        self.log_signal.emit(clean_line)
-                        if "%" in clean_line:
-                            try:
-                                import re
-                                match = re.search(r'\[\s*(\d+)%\]', clean_line)
-                                if match: self.progress_signal.emit(int(match.group(1)))
-                            except: pass
-                
-                process.wait()
-                if process.returncode != 0:
-                    success = False
-            else:
-                success = False
-            self.finished_signal.emit(success, "Prediction Sharp terminée avec succès" if success else "Erreur Sharp.")
+            # [AUDIT] Délégation à la Template Method
+            returncode = self.engine.predict(self.input_path, self.output_path, self.params)
+            success = (returncode == 0)
+            
+            self.finished_signal.emit(success, tr("msg_sharp_done", "Prediction Sharp terminée avec succès") if success else tr("err_sharp", "Erreur Sharp."))
         except Exception as e:
             self.finished_signal.emit(False, str(e))
 
@@ -469,19 +435,20 @@ class SharpWorker(BaseWorker):
 from app.core.four_dgs_engine import FourDGSEngine
 
 class FourDGSWorker(BaseWorker):
-    def __init__(self, videos_dir, output_dir, fps=5):
+    def __init__(self, videos_dir, output_dir, fps=5, engine=None):
         super().__init__()
         self.videos_dir = videos_dir
         self.output_dir = output_dir
         self.fps = fps
-        self.engine = None
-
-    def run(self):
-        self.log_signal.emit("--- Démarrage 4DGS ---")
-        self.engine = FourDGSEngine(
+        # [AUDIT] DIP : Injection
+        self.engine = engine or FourDGSEngine(
             logger_callback=self.log_signal.emit,
             status_callback=self.status_signal.emit
         )
+
+    def run(self):
+        self.log_signal.emit("--- Démarrage 4DGS ---")
+
         
         # 4DGS process is more complex, but we can still use run_subprocess for its internal steps if needed.
         # For now, keep it calling engine.process_dataset but ensure engine doesn't block if we can.

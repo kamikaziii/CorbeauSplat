@@ -93,26 +93,7 @@ class SharpEngine(BaseEngine):
         # Ensure all args are strings for Popen
         cmd = [str(arg) for arg in cmd]
         
-        print(f"Lancement Sharp: {' '.join(cmd)}")
+        self.log(f"Lancement Sharp: {' '.join(cmd)}")
         
-        kwargs = {}
-        if sys.platform != "win32":
-            kwargs['preexec_fn'] = os.setsid
-            
-        self.process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            universal_newlines=True,
-            env=env,
-            **kwargs
-        )
-        
-        return self.process
-
-    # stop method inherited and improved in SharpEngine if needed, 
-    # but BaseEngine has a basic one. We keep the process-specific stop here.
-    def stop(self):
-        """Arrête le processus en cours"""
-        super().stop()
-        self._kill_process(self.process)
+        # [AUDIT] GoF-Template Method : Délégation au runner 
+        return self._execute_command(cmd, env=env)

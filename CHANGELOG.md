@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9] - 2026-03-15
+
+### 🏗 Architecture & Codebase Refactoring (Audit V3)
+- **SOLID Re-Architecture**: Replaced rigid subprocess execution with `IProcessRunner` abstraction, deeply decoupled the UI from the application state via `SessionManager` and `AppLifecycle`, and simplified the dependency injection mechanism.
+- **Security Hardening (OWASP)**: Closed Command Injection flaws in the Brush Engine and eliminated Path Traversal vulnerabilities globally by validating every input and output path against safe directories and characters.
+- **Template Method Design**: Eliminated 300+ lines of duplicate execution loops across engines by integrating a unified Template Method parsing execution standard (`_execute_command`).
+- **Observability**: Replaced scattered print statements with proper structural logging implementation. Extracted all UI engine feedback strings to the localizer.
+
+### ⚡ Performance optimization
+- **UI Responsiveness Engine**: Relocated heavy JSON file write operations out of the main QT GUI loop, completely removing application freezes when checking checkboxes via a debounced write cycle.
+- **Micro-management**: Split 150-line God objects and functions into focused, readable modules. Standardized variable names site-wide per Clean Code guidelines.
+
 ## [0.81] - 2026-03-15
 
 ### ✨ New Features

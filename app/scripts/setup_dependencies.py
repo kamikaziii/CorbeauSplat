@@ -30,6 +30,10 @@ class EngineDependency:
     def resolve_project_root(self) -> Path:
         return resolve_project_root()
 
+    def is_enabled_in_config(self, config: dict) -> bool:
+        """[AUDIT] SOLID-OCP : Permet au moteur de decider s'il est actif"""
+        return config.get(f"{self.name}_enabled", True)
+
     def is_installed(self) -> bool:
         return self.bin_path.exists()
 
@@ -143,22 +147,9 @@ class DependencyManager:
         config = self.get_config()
         missing_engines_startup = False
         
-        # Sequentially check/install registered engines
         for name, engine in self.engines.items():
-            # Check if enabled in config
-            enabled = True
-            if name == "sharp":
-                enabled = config.get("sharp_params", {}).get("enabled", False) or config.get("sharp_enabled", False)
-            elif name == "upscale":
-                enabled = config.get("upscale_params", {}).get("enabled", False) or config.get("upscale_enabled", False)
-            elif name == "extractor_360":
-                enabled = config.get("extractor_360_params", {}).get("enabled", False) or config.get("extractor_360_enabled", False)
-            elif name == "brush":
-                enabled = config.get("brush_params", {}).get("enabled", False) or config.get("brush_enabled", False)
-            elif name == "glomap":
-                enabled = config.get("glomap_enabled", True) # Default enabled for Glomap
-            elif name == "supersplat":
-                enabled = config.get("supersplat_enabled", True)
+            # [AUDIT] OCP : Le moteur decide s'il est active
+            enabled = engine.is_enabled_in_config(config)
             
             # During --check or --startup, we audit everything. During install, we respect enablement.
             if not enabled and not (check_only or startup):
@@ -221,6 +212,9 @@ class Extractor360EngineDep(PipEngine):
         super().__init__("extractor_360", EXTRACTOR_360_REPO, ".venv_360")
         self.script_path = self.target_dir / "src" / "main.py"
 
+    def is_enabled_in_config(self, config: dict) -> bool:
+        return config.get("extractor_360_params", {}).get("enabled", False) or config.get("extractor_360_enabled", False)
+
     def install(self):
         self.update_git()
         self.create_venv()
@@ -232,6 +226,9 @@ class Extractor360EngineDep(PipEngine):
 class BrushEngineDep(EngineDependency):
     def __init__(self):
         super().__init__("brush", BRUSH_REPO)
+
+    def is_enabled_in_config(self, config: dict) -> bool:
+        return config.get("brush_params", {}).get("enabled", False) or config.get("brush_enabled", False)
 
     def get_remote_version(self) -> str:
         """Queries GitHub API for the latest Brush release tag."""
@@ -451,6 +448,9 @@ class BrushEngineDep(EngineDependency):
 class SharpEngineDep(PipEngine):
     def __init__(self):
         super().__init__("sharp", SHARP_REPO, ".venv_sharp")
+
+    def is_enabled_in_config(self, config: dict) -> bool:
+        return config.get("sharp_params", {}).get("enabled", False) or config.get("sharp_enabled", False)
 
     def install(self):
         self.update_git()
@@ -725,6 +725,9 @@ class UpscaleEngineDep(PipEngine):
         # We use a fake venv name to satisfy PipEngine but we'll override
         super().__init__("upscale", None, "fake")
         self.python_bin = Path(sys.executable)
+
+    def is_enabled_in_config(self, config: dict) -> bool:
+        return config.get("upscale_params", {}).get("enabled", False) or config.get("upscale_enabled", False)
 
     def is_installed(self) -> bool:
         from app.core.upscale_engine import UpscaleEngine
