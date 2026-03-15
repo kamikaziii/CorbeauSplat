@@ -88,6 +88,10 @@ class PipEngine(EngineDependency):
         return self.python_bin.exists()
 
     def create_venv(self, python_cmd=sys.executable):
+        if self.venv_dir.exists() and not self.python_bin.exists():
+            print(f"Broken venv detected at {self.venv_dir} (symlink or binary missing). Removing...")
+            shutil.rmtree(str(self.venv_dir))
+
         if not self.venv_dir.exists():
             print(f"Creating venv: {self.venv_dir}")
             subprocess.check_call([python_cmd, "-m", "venv", str(self.venv_dir)])

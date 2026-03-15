@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.81] - 2026-03-15
+
+### ✨ New Features
+-   **Advanced Reset Factory**: Introduced a multi-level reset system with a custom, high-visibility dialog.
+    -   **Light Reset**: Cleans Python environments (.venv) only.
+    -   **Deep Reset**: Full wipe of environments, engine binaries, and configuration files.
+-   **Self-Repairing Environments**: `setup_dependencies.py` now automatically detects and repairs broken virtual environments (e.g., caused by Homebrew Python upgrades breaking symlinks).
+-   **Direct Source Selection**: Replaced ambiguous popups with persistent radio buttons in the Training tab for "Folder" vs "Files" selection.
+
+### 🛠 Improvements
+-   **Reset UI Polish**: Custom styled dialog with large buttons and detailed descriptions for better clarity across all languages.
+-   **Maintenance**: Exhaustive cleanup of `.venv_360` and sync-conflict files during resets.
+
 ## [0.8] - 2026-03-10
 
 ### ✨ New Features & Languages

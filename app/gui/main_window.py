@@ -527,7 +527,7 @@ class ColmapGUI(QMainWindow):
         QApplication.quit()
         sys.exit(0)
         
-    def reset_factory(self):
+    def reset_factory(self, deep=False):
         """Supprime les venvs et relance l'installation/application"""
         import subprocess
         
@@ -537,18 +537,31 @@ class ColmapGUI(QMainWindow):
         root_dir = resolve_project_root()
             
         run_cmd = root_dir / "run.command"
-        venv_path = root_dir / ".venv"
-        venv_sharp_path = root_dir / ".venv_sharp"
         
-        print(f"Reset Factory initie sur: {root_dir}")
+        # Dossiers à supprimer systématiquement (venvs)
+        to_delete = [
+            root_dir / ".venv",
+            root_dir / ".venv_sharp",
+            root_dir / ".venv_360"
+        ]
+        
+        if deep:
+            to_delete.append(root_dir / "engines")
+            to_delete.append(root_dir / "config.json")
+            # Nettoyer aussi les fichiers de conflit de synchro éventuels
+            for p in root_dir.glob("config.sync-conflict-*"):
+                to_delete.append(p)
+        
+        delete_cmd = " ".join([f'"{str(p)}"' for p in to_delete])
+        
+        print(f"Reset Factory {'DEEP' if deep else 'LIGHT'} initie sur: {root_dir}")
         print(f"Commande relance: {run_cmd}")
         
         # On lance une commande shell détachée qui va:
         # 1. Attendre que nous quittions (sleep 2)
-        # 2. Supprimer les dossiers venv
+        # 2. Supprimer les dossiers venv (et engines/config si deep)
         # 3. Relancer run.command
-        
-        cmd = f"sleep 2 && rm -rf \"{venv_path}\" \"{venv_sharp_path}\" && \"{run_cmd}\" &"
+        cmd = f"sleep 2 && rm -rf {delete_cmd} && \"{run_cmd}\" &"
         
         subprocess.Popen(cmd, shell=True, cwd=str(root_dir))
         sys.exit(0)

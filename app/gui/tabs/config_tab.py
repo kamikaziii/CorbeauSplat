@@ -1,12 +1,92 @@
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QLineEdit,
     QGroupBox, QRadioButton, QSpinBox, QCheckBox, QMessageBox, QComboBox,
-    QProgressBar, QButtonGroup
+    QProgressBar, QButtonGroup, QDialog
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from app.core.i18n import tr, set_language, get_current_lang, add_language_observer
 from app.gui.widgets.drop_line_edit import DropLineEdit
 from app.gui.widgets.dialog_utils import get_existing_directory, get_open_file_names
+
+class ResetDialog(QDialog):
+    """Dialogue de réinitialisation personnalisé pour de meilleurs boutons"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("btn_reset"))
+        self.setMinimumWidth(450)
+        self.result_deep = None
+        
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+        
+        # Titre / Description
+        lbl = QLabel(tr("confirm_reset"))
+        lbl.setWordWrap(True)
+        lbl.setStyleSheet("font-weight: bold; font-size: 14px; margin-bottom: 10px;")
+        layout.addWidget(lbl)
+        
+        # Bouton Light
+        self.btn_light = QPushButton(tr("reset_light"))
+        self.btn_light.setMinimumHeight(60)
+        self.btn_light.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+                text-align: left;
+                padding-left: 20px;
+            }
+            QPushButton:hover { background-color: #2980b9; }
+        """)
+        
+        desc_light = QLabel(tr("reset_light_desc"))
+        desc_light.setStyleSheet("color: #7f8c8d; font-size: 12px; margin-top: -15px; margin-left: 20px;")
+        
+        layout.addWidget(self.btn_light)
+        layout.addWidget(desc_light)
+        
+        # Bouton Deep
+        self.btn_deep = QPushButton(tr("reset_deep"))
+        self.btn_deep.setMinimumHeight(60)
+        self.btn_deep.setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: white;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+                text-align: left;
+                padding-left: 20px;
+            }
+            QPushButton:hover { background-color: #c0392b; }
+        """)
+        
+        desc_deep = QLabel(tr("reset_deep_desc"))
+        desc_deep.setStyleSheet("color: #7f8c8d; font-size: 12px; margin-top: -15px; margin-left: 20px;")
+        
+        layout.addWidget(self.btn_deep)
+        layout.addWidget(desc_deep)
+        
+        # Séparateur
+        line = QLabel()
+        line.setFrameShape(QLabel.FrameShape.HLine)
+        line.setFrameShadow(QLabel.FrameShadow.Sunken)
+        layout.addWidget(line)
+        
+        # Bouton Annuler
+        self.btn_cancel = QPushButton(tr("btn_quit", "Annuler")) # Re-using quit/cancel
+        if self.btn_cancel.text() == "Quitter": self.btn_cancel.setText("Annuler")
+        self.btn_cancel.setMinimumHeight(40)
+        layout.addWidget(self.btn_cancel)
+        
+        # Connections
+        self.btn_light.clicked.connect(lambda: self.done_with(False))
+        self.btn_deep.clicked.connect(lambda: self.done_with(True))
+        self.btn_cancel.clicked.connect(self.reject)
+        
+    def done_with(self, deep):
+        self.result_deep = deep
+        self.accept()
 
 class ConfigTab(QWidget):
     """Onglet de configuration principale"""
@@ -17,7 +97,7 @@ class ConfigTab(QWidget):
     deleteDatasetRequested = pyqtSignal()
     quitRequested = pyqtSignal()
     relaunchRequested = pyqtSignal()
-    resetRequested = pyqtSignal()
+    resetRequested = pyqtSignal(bool) # True if deep reset requested
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -500,16 +580,9 @@ class ConfigTab(QWidget):
         self.update_ui_state()
 
     def on_reset_clicked(self):
-        reply = QMessageBox.question(
-            self, 
-            tr("btn_reset"), 
-            tr("confirm_reset"),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, 
-            QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            self.resetRequested.emit()
+        diag = ResetDialog(self)
+        if diag.exec():
+            self.resetRequested.emit(diag.result_deep)
 
     def retranslate_ui(self):
         """Met à jour les textes des widgets lors du changement de langue"""
