@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QLineEdit,
     QGroupBox, QRadioButton, QSpinBox, QCheckBox, QMessageBox, QComboBox,
-    QProgressBar, QButtonGroup, QDialog
+    QProgressBar, QButtonGroup, QDialog, QFrame
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 from app.core.i18n import tr, set_language, get_current_lang, add_language_observer
@@ -70,9 +70,9 @@ class ResetDialog(QDialog):
         layout.addWidget(desc_deep)
         
         # Séparateur
-        line = QLabel()
-        line.setFrameShape(QLabel.FrameShape.HLine)
-        line.setFrameShadow(QLabel.FrameShadow.Sunken)
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
         layout.addWidget(line)
         
         # Bouton Annuler
