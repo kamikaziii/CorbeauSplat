@@ -13,6 +13,9 @@
 -   **Reset UI Polish**: Custom styled dialog with large buttons and detailed descriptions for better clarity across all languages.
 -   **Maintenance**: Exhaustive cleanup of `.venv_360` and sync-conflict files during resets.
 
+### 🐞 Bug Fixes
+-   **`config_tab.py`**: Fixed a critical `IndentationError` and missing imports introduced during the UI refactor that prevented the application from launching after a factory reset.
+
 ## [0.8] - 2026-03-10
 
 ### ✨ New Features & Languages

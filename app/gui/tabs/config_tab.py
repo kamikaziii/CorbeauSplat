@@ -1,3 +1,5 @@
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QLineEdit,
     QGroupBox, QRadioButton, QSpinBox, QCheckBox, QMessageBox, QComboBox,
     QProgressBar, QButtonGroup, QDialog
 )
