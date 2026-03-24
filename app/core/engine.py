@@ -226,21 +226,31 @@ class ColmapEngine(BaseEngine):
                      return False
             return True
         else:
-            # Copie des images (récursive pour supporter les sorties d'extracteurs)
+            # Copie des images
             self.log("Copie des images sources vers le dossier de travail...")
             
-            if self.input_path.resolve() == images_dir.resolve():
-                self.log("Les images sont déjà dans le dossier de destination. Copie ignorée.")
-                return True
-            
             try:
-                # Recherche récursive de fichiers images, en ignorant les masques (*.mask.png)
-                src_files = [
-                    f for f in self.input_path.rglob('*')
-                    if f.is_file()
-                    and f.suffix.lower() in _IMAGE_EXTS
-                    and not f.name.lower().endswith('.mask.png')
-                ]
+                raw_input = str(self.input_path)
+                src_files = []
+                
+                if "|" in raw_input:
+                    paths = [Path(p.strip()) for p in raw_input.split("|") if p.strip()]
+                    for p in paths:
+                        if p.is_file() and p.suffix.lower() in _IMAGE_EXTS and not p.name.lower().endswith('.mask.png'):
+                            src_files.append(p)
+                elif self.input_path.is_file():
+                    if self.input_path.suffix.lower() in _IMAGE_EXTS and not self.input_path.name.lower().endswith('.mask.png'):
+                        src_files.append(self.input_path)
+                elif self.input_path.is_dir():
+                    if self.input_path.resolve() == images_dir.resolve():
+                        self.log("Les images sont déjà dans le dossier de destination. Copie ignorée.")
+                        return True
+                    src_files = [
+                        f for f in self.input_path.rglob('*')
+                        if f.is_file()
+                        and f.suffix.lower() in _IMAGE_EXTS
+                        and not f.name.lower().endswith('.mask.png')
+                    ]
                 
                 total_files = len(src_files)
                 self.log(f"{total_files} images trouvées.")

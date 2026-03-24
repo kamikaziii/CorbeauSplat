@@ -34,7 +34,7 @@ class BrushEngine(BaseEngine):
         cmd.extend(["--export-path", str(safe_output)])
         
         if params.get("total_steps"):
-            cmd.extend(["--total-steps", str(params["total_steps"])])
+            cmd.extend(["--total-train-iters", str(params["total_steps"])])
             
         if params.get("sh_degree"):
              cmd.extend(["--sh-degree", str(params["sh_degree"])])
@@ -56,7 +56,12 @@ class BrushEngine(BaseEngine):
         # pour éviter la command injection (ex: écrasement de binaires ou flags inattendus)
         custom_args = params.get("custom_args")
         if custom_args:
-            allowed_flags = {"--save-iterations", "--log-level", "--test-split"}
+            allowed_flags = {
+                "--save-iterations", "--log-level", "--test-split",
+                "--start-iter", "--refine-every", "--growth-grad-threshold",
+                "--growth-select-fraction", "--growth-stop-iter", "--max-splats",
+                "--eval-every"
+            }
             args_list = custom_args.split()
             safe_args = []
             
