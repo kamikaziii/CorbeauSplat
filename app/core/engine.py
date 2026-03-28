@@ -510,7 +510,7 @@ class ColmapEngine(BaseEngine):
             '--ImageReader.camera_model', self.params.camera_model,
             '--ImageReader.single_camera', '1' if self.params.single_camera else '0',
             '--FeatureExtraction.num_threads', str(self.num_threads),
-            '--SiftExtraction.max_image_size', str(self.params.max_image_size),
+            '--FeatureExtraction.max_image_size', str(self.params.max_image_size),
             '--SiftExtraction.max_num_features', str(self.params.max_num_features),
             '--SiftExtraction.estimate_affine_shape', '1' if self.params.estimate_affine_shape else '0',
             '--SiftExtraction.domain_size_pooling', '1' if self.params.domain_size_pooling else '0',
