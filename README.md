@@ -47,7 +47,7 @@ It also includes built-in full localization support for **French, English, Germa
 ### Installation
 1.  Clone this repository:
     ```bash
-    git clone https://github.com/freddewitt/CorbeauSplat.git
+    git clone https://github.com/kamikaziii/CorbeauSplat.git
     cd CorbeauSplat
     ```
 
