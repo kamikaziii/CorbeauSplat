@@ -140,6 +140,14 @@ class ColmapEngine(BaseEngine):
     def _run_reconstruction_pipeline(self, project_dir, images_dir):
         database_path = project_dir / "database.db"
         sparse_dir = project_dir / "sparse"
+
+        # Clean stale COLMAP data from previous runs to prevent
+        # corrupted reconstructions (IMAGE_EXISTS / failed registrations)
+        if database_path.exists():
+            self.log("Nettoyage de la base de données COLMAP existante...")
+            database_path.unlink()
+        if sparse_dir.exists():
+            shutil.rmtree(sparse_dir)
         sparse_dir.mkdir(exist_ok=True)
         
         self.progress(25)
