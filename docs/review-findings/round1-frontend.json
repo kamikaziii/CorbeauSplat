@@ -1,0 +1,29 @@
+{
+  "agent": "frontend-reviewer",
+  "files_analyzed": 16,
+  "critical": [
+    {"file": "app/gui/main_window.py", "line": 497, "issue": "closeEvent does not stop running workers — subprocesses become orphaned, QThread destroyed while running (UB/crash)", "fix": "Call stop() on all active workers, wait() with timeout before accepting close event"},
+    {"file": "app/gui/main_window.py", "line": 262, "issue": "fourdgs_worker never initialized to None — uses fragile hasattr() checks", "fix": "Initialize self.fourdgs_worker = None in __init__"},
+    {"file": "app/gui/tabs/sharp_tab.py", "line": 196, "issue": "install/uninstall_sharp_module() blocks main thread — GUI freezes entirely", "fix": "Run in QThread worker like Extractor360Tab does"},
+    {"file": "app/gui/tabs/upscale_tab.py", "line": 268, "issue": "install_deps/uninstall_deps/download_model all block main thread — GUI freezes", "fix": "Move to QThread workers"},
+    {"file": "app/gui/tabs/four_dgs_tab.py", "line": 142, "issue": "install_dependencies() calls subprocess.check_call() on main thread AND subprocess is never imported — NameError + GUI freeze", "fix": "Add import and move to background worker"}
+  ],
+  "warnings": [
+    {"file": "app/gui/main_window.py", "line": 207, "issue": "Worker signal connections never disconnected — old workers could emit signals after replacement", "fix": "Disconnect old worker signals or use UniqueConnection"},
+    {"file": "app/gui/base_worker.py", "line": 7, "issue": "is_running flag has data race — written by main thread, read by worker thread without synchronization", "fix": "Use QMutex or QThread.isInterruptionRequested()"},
+    {"file": "app/gui/base_worker.py", "line": 62, "issue": "process.wait() has no timeout — could block indefinitely if child ignores SIGTERM", "fix": "Use wait(timeout=5) then kill()"},
+    {"file": "app/gui/managers.py", "line": 166, "issue": "reset_factory() uses shell=True with string-constructed rm -rf command", "fix": "Use shutil.rmtree() instead"},
+    {"file": "app/gui/tabs/extractor_360_tab.py", "line": 231, "issue": "Worker instantiated with no args then attributes set directly — fragile pattern", "fix": "Use proper constructor parameters"},
+    {"file": "app/gui/tabs/superplat_tab.py", "line": 207, "issue": "closeEvent on QWidget in QTabWidget not reliably called — servers may keep running", "fix": "Have main window explicitly call stop_server()"},
+    {"file": "app/gui/main_window.py", "line": 41, "issue": "Language observer references prevent GC — potential memory leak", "fix": "Use weak references or provide remove_observer()"}
+  ],
+  "info": [
+    {"file": "app/gui/tabs/brush_tab.py", "line": 309, "issue": "'default' and 'std' presets set identical values", "fix": "Remove duplicate or differentiate"},
+    {"file": "app/gui/main_window.py", "line": 184, "issue": "Signal connection pattern duplicated across all modes in process()", "fix": "Extract connect_worker_signals() helper"},
+    {"file": "app/gui/tabs/config_tab.py", "line": 80, "issue": "ResetDialog repurposes btn_quit key then hardcodes French string check", "fix": "Use dedicated btn_cancel i18n key"},
+    {"file": "app/gui/managers.py", "line": 33, "issue": "SessionManager reaches into config_tab widget internals", "fix": "Use config_tab.get_state() instead"},
+    {"file": "app/gui/tabs/upscale_tab.py", "line": 266, "issue": "setEnabled(False) called unconditionally even when user cancels", "fix": "Move inside else block"},
+    {"file": "app/gui/base_worker.py", "line": 25, "issue": "Bare except in stop() swallows SystemExit/KeyboardInterrupt", "fix": "Use 'except Exception:'"},
+    {"file": "app/gui/tabs/config_tab.py", "line": 616, "issue": "retranslate_ui uses btn_stop text when processing — incorrect label", "fix": "Track processing state explicitly"}
+  ]
+}

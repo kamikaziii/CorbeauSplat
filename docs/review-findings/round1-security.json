@@ -1,0 +1,27 @@
+{
+  "agent": "security-sentinel",
+  "files_analyzed": 10,
+  "critical": [
+    {"file": "app/core/base_engine.py", "line": 165, "issue": "validate_path() is advisory-only — logs warning but returns the resolved path even when outside allowed boundaries, making the check ineffective", "fix": "Return None (reject) when the path is outside allowed_bases"},
+    {"file": "app/core/extractor_360_engine.py", "line": 29, "issue": "No path validation on input_path or output_dir — user-supplied strings passed directly to subprocess", "fix": "Call self.validate_path() on input_path and output_dir"},
+    {"file": "app/core/extractor_360_engine.py", "line": 52, "issue": "Format parameter from user dict passed directly to CLI without validation — possible argument injection", "fix": "Whitelist allowed format values ('jpg', 'png') and reject anything else"}
+  ],
+  "warnings": [
+    {"file": "app/core/extractor_360_engine.py", "line": 96, "issue": "Direct Popen bypasses BaseEngine._execute_command() — no setsid, no cancellation support, risks zombie processes", "fix": "Use self._execute_command() or add preexec_fn=os.setsid"},
+    {"file": "app/core/four_dgs_engine.py", "line": 24, "issue": "No path validation on video_path or output_dir", "fix": "Call self.validate_path() on all user-supplied paths"},
+    {"file": "app/core/sharp_engine.py", "line": 63, "issue": "No path validation — arbitrary file paths fed to Sharp binary", "fix": "Call self.validate_path() on input_path, output_path, checkpoint"},
+    {"file": "app/core/superplat_engine.py", "line": 61, "issue": "No path validation on directory served over HTTP — any local process could read arbitrary files", "fix": "Validate directory with validate_path()"},
+    {"file": "app/core/brush_engine.py", "line": 65, "issue": "Custom args whitelist allows unvalidated values through", "fix": "Validate values for whitelisted flags"},
+    {"file": "main.py", "line": 103, "issue": "run_brush() treats int return from engine.train() as subprocess object — will crash with AttributeError", "fix": "Handle int return value properly"},
+    {"file": "main.py", "line": 133, "issue": "run_sharp() same bug — treats int return as process object", "fix": "Handle int return value properly"},
+    {"file": "app/core/base_engine.py", "line": 118, "issue": "Full command with all arguments logged to UI — may expose sensitive path info", "fix": "Redact sensitive path components in logs"},
+    {"file": "app/core/extractor_360_engine.py", "line": 34, "issue": "Missing 'tr' import — NameError at runtime when status_callback is provided", "fix": "Add 'from .i18n import tr' to imports"}
+  ],
+  "info": [
+    {"file": "app/core/base_engine.py", "line": 48, "issue": "preexec_fn=os.setsid deprecated in Python 3.12+ in favor of process_group=0", "fix": "Use process_group=0 on Python 3.12+"},
+    {"file": "app/core/superplat_engine.py", "line": 34, "issue": "Server port not validated", "fix": "Validate port in range 1024-65535"},
+    {"file": "app/core/upscale_engine.py", "line": 182, "issue": "urlretrieve may not verify TLS certs, no progress feedback for large downloads", "fix": "Use requests with stream=True"},
+    {"file": "app/core/engine.py", "line": 33, "issue": "Binary fallback 'resolve_binary(x) or x' defers failure to subprocess time", "fix": "Fail fast with descriptive error"},
+    {"file": "app/core/four_dgs_engine.py", "line": 88, "issue": "Inconsistent argument format for COLMAP flags", "fix": "Standardize argument format"}
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "agent": "architecture-reviewer",
+  "files_analyzed": 12,
+  "critical": [
+    {"file": "app/gui/main_window.py", "line": 332, "issue": "~15 hardcoded French strings bypass i18n system entirely — breaks 9-language support", "fix": "Extract all hardcoded French strings into i18n keys via tr()"},
+    {"file": "main.py", "line": 181, "issue": "CLI supersplat mode has hardcoded French output bypassing i18n", "fix": "Route through tr() with proper i18n keys"},
+    {"file": "app/core/i18n.py", "line": 54, "issue": "Bare except in load_config(), save_config(), and tr() silently swallows all errors", "fix": "Catch specific exceptions (json.JSONDecodeError, OSError)"},
+    {"file": "app/gui/managers.py", "line": 107, "issue": "AppLifecycle.restart() uses shell=True with string interpolation of argv — command injection risk", "fix": "Use Popen with list args instead of shell=True"}
+  ],
+  "warnings": [
+    {"file": "main.py", "line": 19, "issue": "tr() called at module parse time for argparse — language baked at import, fragile .replace('v0.8','v0.9') for version", "fix": "Use VERSION constant, build parser inside main()"},
+    {"file": "main.py", "line": 6, "issue": "PyQt6 unconditionally imported even for CLI-only operations — fails on headless servers", "fix": "Defer PyQt6 imports to GUI branch only"},
+    {"file": "app/gui/main_window.py", "line": 260, "issue": "Inconsistent worker lifecycle — some init to None, others use hasattr()", "fix": "Initialize all workers to None in __init__"},
+    {"file": "requirements.txt", "line": 1, "issue": "No version pinning on major deps (PyQt6, requests, etc.) — non-reproducible builds", "fix": "Pin major.minor versions"},
+    {"file": "app/core/system.py", "line": 62, "issue": "CUDA detection uses naive nvidia-smi heuristic", "fix": "Use torch.cuda.is_available() when torch is available"},
+    {"file": "app/core/system.py", "line": 69, "issue": "psutil used but not in requirements.txt", "fix": "Add psutil to requirements.txt"},
+    {"file": "app/gui/managers.py", "line": 143, "issue": "reset_factory() rm -rf via shell with race condition", "fix": "Use shutil.rmtree in-process"},
+    {"file": "app/scripts/setup_dependencies.py", "line": 636, "issue": "curl | sh for Rust install — RCE if URL/DNS compromised", "fix": "Download to temp file, verify hash, then execute"},
+    {"file": "app/__init__.py", "line": 1, "issue": "VERSION='0.9' but locale files say 'v0.8', patched via string replace", "fix": "Use VERSION constant directly in cli_desc"}
+  ],
+  "info": [
+    {"file": "app/core/i18n.py", "line": 92, "issue": "LanguageManager singleton instantiated at import time — triggers file I/O as import side effect", "fix": "Consider lazy initialization"},
+    {"file": "assets/locales/de.json", "line": 0, "issue": "de.json has orphaned key 'brush_build_mode' not in other locales", "fix": "Remove or add to all locales"},
+    {"file": "app/gui/managers.py", "line": 31, "issue": "SessionManager reaches into widget internals", "fix": "Use get_state() interface consistently"},
+    {"file": "app/scripts/setup_dependencies.py", "line": 475, "issue": "load_config() uses relative Path('config.json') — wrong dir if CWD differs", "fix": "Use resolve_project_root() / 'config.json'"},
+    {"file": "verify_imports.py", "line": 6, "issue": "Only tests 3 imports — minimal coverage", "fix": "Expand or replace with proper test framework"},
+    {"file": "app/core/i18n.py", "line": 19, "issue": "Observer list uses direct references — potential memory leak if widget destroyed without removing observer", "fix": "Use weakref callbacks or add remove_observer()"}
+  ]
+}
