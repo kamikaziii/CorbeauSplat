@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from app.core.i18n import tr, add_language_observer
 from app.core.upscale_engine import UpscaleEngine
+from app.gui.base_worker import InstallWorker
 from app.scripts.setup_dependencies import install_upscale, uninstall_upscale, resolve_project_root
 
 class UpscaleTab(QWidget):
@@ -80,11 +81,11 @@ class UpscaleTab(QWidget):
         # Performance Profile
         self.profile_combo = QComboBox()
         self.profile_combo.addItems([
-            "Safe / MacBook Air (Defaut)",
-            "Qualite Max",
-            "Vitesse Max (High VRAM)",
-            "Ultimate (Ultra VRAM)",
-            "Personnalise"
+            tr("upscale_profile_safe"),
+            tr("upscale_profile_quality"),
+            tr("upscale_profile_speed"),
+            tr("upscale_profile_ultimate"),
+            tr("upscale_profile_custom")
         ])
         self.profile_combo.setToolTip(tr("upscale_tip_profile"))
         self.lbl_profile = QLabel(tr("upscale_lbl_profile"))
@@ -194,28 +195,23 @@ class UpscaleTab(QWidget):
 
     def download_current_model(self):
         model = self.model_combo.currentText()
-        
-        progress = QProgressDialog(tr("upscale_msg_downloading", model), tr("btn_cancel"), 0, 0, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
-        
-        def log_cb(line):
-             # We could pipe logs here
-             pass
-             
-        # Run download in main thread for simplicity (files are ~100MB, might freeze GUI briefly without thread)
-        # Ideally threading, but UpscaleEngine.download_model is blocking 'urllib'.
-        # Let's hope user has fiber, otherwise we should use a worker.
-        # Check UpscaleEngine again, I used urllib.request.urlretrieve. It blocks.
-        # But I added a (broken in my head) progress callback logic which I didn't fully implement.
-        # For now, let's just run it.
-        
-        QApplication.processEvents()
-        success = self.engine.download_model(model)
-        progress.close()
-        
+        self.btn_download.setEnabled(False)
+        self._progress = QProgressDialog(tr("upscale_msg_downloading", model), None, 0, 0, self)
+        self._progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self._progress.show()
+
+        self._download_worker = InstallWorker(
+            lambda: self.engine.download_model(model),
+            tr("upscale_msg_success_download")
+        )
+        self._download_worker.finished_signal.connect(self._on_download_finished)
+        self._download_worker.start()
+
+    def _on_download_finished(self, success, message):
+        self._progress.close()
+        self.btn_download.setEnabled(True)
         if success:
-            QMessageBox.information(self, tr("msg_success"), tr("upscale_msg_success_download"))
+            QMessageBox.information(self, tr("msg_success"), message)
             self.check_model_status()
         else:
             QMessageBox.critical(self, tr("msg_error"), tr("upscale_msg_err_download"))
@@ -225,9 +221,9 @@ class UpscaleTab(QWidget):
             # Activation requested
             if not self.engine.is_installed():
                 reply = QMessageBox.question(
-                    self, 
-                    "Installation Requise", 
-                    "Le module Real-ESRGAN doit être installé (~50MB + dépendances Torch).\nContinuer ?",
+                    self,
+                    tr("install_required"),
+                    tr("upscale_install_confirm"),
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
                 
@@ -241,85 +237,59 @@ class UpscaleTab(QWidget):
             # Deactivation requested
             reply = QMessageBox.question(
                 self,
-                "Désactivation",
-                "Voulez-vous désinstaller le module Real-ESRGAN pour libérer de l'espace ?\n(Les modèles seront supprimés)",
+                tr("upscale_deactivate_title"),
+                tr("upscale_deactivate_msg"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             
             if reply == QMessageBox.StandardButton.Yes:
                 self.uninstall_deps()
             else:
-                # If user cancels uninstall, do we keep it checked? 
-                # User request: "Une fois décoché, il supprime..."
-                # If they say no, maybe they just want to disable without uninstalling?
-                # "Quand c'est décoché, le contenu... est grisée".
-                # So we can allow uncheck without uninstall if we want, OR enforce it.
-                # Use case: "Une fois décoché, il supprime les programmes". Explicit.
-                # So if they say No to uninstall, we probably should cancel the uncheck action (re-check it), 
-                # OR we accept uncheck but don't uninstall (just disable UI).
-                # Let's assume strict compliance: "Une fois décoché, il supprime".
-                # But typically users might just want to disable to save startup time without deleting files.
-                # Let's offer: "Oui (Supprimer fichiers)", "Non (Désactiver seulement)", "Annuler".
-                # For now, simple Yes/No. 
-                # If No, we just disable UI but keep files.
                 self.settings_group.setEnabled(False)
-            self.settings_group.setEnabled(False)
 
     def install_deps(self):
-        progress = QProgressDialog("Installation de Real-ESRGAN...", "Annuler", 0, 0, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
-        QApplication.processEvents()
-        
-        try:
-             # install_upscale_deps uses subprocess check_call, so it blocks.
-             # We pass None as version file as it's pip managed mostly or we don't care about version file for pip packages primarily here.
-             # setup_dependencies.py: install_upscale_deps(engines_dir, version_file...)
-             # But wait, my import might be tricky if paths are relative.
-             # We assume imports work.
-             
-             # We need engines_dir.
-             # We can get it from engine instance or resolve it.
-             # UpscaleEngine doesn't expose it easily?
-             # setup_dependencies has resolve_project_root.
-             # We can just pass a dummy path if it resolves internally?
-             # install_upscale_deps(engines_dir, version_file)
-             
-             resolve_project_root() / "engines"
-             
-             success = install_upscale()
-             
-             if success:
-                 QMessageBox.information(self, tr("msg_success"), "Installation terminée.")
-                 self.settings_group.setEnabled(True)
-                 self.check_model_status()
-             else:
-                 QMessageBox.critical(self, tr("msg_error"), "Echec de l'installation.")
-                 self.chk_activate.setChecked(False)
-                 self.settings_group.setEnabled(False)
-                 
-        except Exception as e:
-            QMessageBox.critical(self, tr("msg_error"), f"Erreur: {e}")
+        self.chk_activate.setEnabled(False)
+        self._progress = QProgressDialog(tr("upscale_msg_downloading", "Real-ESRGAN"), None, 0, 0, self)
+        self._progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self._progress.show()
+
+        self._install_worker = InstallWorker(install_upscale, tr("upscale_msg_installed"))
+        self._install_worker.finished_signal.connect(self._on_install_finished)
+        self._install_worker.start()
+
+    def _on_install_finished(self, success, message):
+        self._progress.close()
+        self.chk_activate.setEnabled(True)
+        if success:
+            QMessageBox.information(self, tr("msg_success"), message)
+            self.settings_group.setEnabled(True)
+            self.check_model_status()
+        else:
+            QMessageBox.critical(self, tr("msg_error"), tr("upscale_msg_install_err"))
             self.chk_activate.setChecked(False)
-        finally:
-            progress.close()
+            self.settings_group.setEnabled(False)
 
     def uninstall_deps(self):
-        progress = QProgressDialog("Désinstallation de Real-ESRGAN...", None, 0, 0, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
-        QApplication.processEvents()
-        
-        try:
-            success = uninstall_upscale()
-            if success:
-                QMessageBox.information(self, "Succès", "Module désinstallé.")
-                self.settings_group.setEnabled(False)
-                self.status_label.setText(tr("upscale_status_not_installed"))
-        except Exception as e:
-             QMessageBox.critical(self, tr("msg_error"), f"Erreur: {e}")
-        finally:
-            progress.close()
+        self.chk_activate.setEnabled(False)
+        self._progress = QProgressDialog(tr("upscale_deactivate_title"), None, 0, 0, self)
+        self._progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self._progress.show()
+
+        self._uninstall_worker = InstallWorker(uninstall_upscale, tr("upscale_msg_uninstalled"))
+        self._uninstall_worker.finished_signal.connect(self._on_uninstall_finished)
+        self._uninstall_worker.start()
+
+    def _on_uninstall_finished(self, success, message):
+        self._progress.close()
+        self.chk_activate.setEnabled(True)
+        if success:
+            QMessageBox.information(self, tr("msg_success"), message)
+            self.settings_group.setEnabled(False)
+            self.status_label.setText(tr("upscale_status_not_installed"))
+        else:
+            QMessageBox.critical(self, tr("msg_error"), message)
+            self.chk_activate.setChecked(True)
+            self.settings_group.setEnabled(True)
 
     def get_params(self):
         return {
@@ -375,6 +345,12 @@ class UpscaleTab(QWidget):
         self.face_enhance.setText(tr("upscale_check_face"))
         self.face_enhance.setToolTip(tr("upscale_tip_face"))
         self.lbl_fp16.setText(tr("upscale_lbl_fp16", "Demi-précision (FP16)"))
-        
+
+        self.profile_combo.setItemText(0, tr("upscale_profile_safe"))
+        self.profile_combo.setItemText(1, tr("upscale_profile_quality"))
+        self.profile_combo.setItemText(2, tr("upscale_profile_speed"))
+        self.profile_combo.setItemText(3, tr("upscale_profile_ultimate"))
+        self.profile_combo.setItemText(4, tr("upscale_profile_custom"))
+
         self.check_model_status()
         self.update_model_desc()

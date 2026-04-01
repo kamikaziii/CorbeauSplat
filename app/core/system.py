@@ -66,16 +66,6 @@ def get_device():
         return "cuda"
     return "cpu"
 
-def get_memory_info():
-    """Returns memory info for UMA/caching strategies"""
-    import psutil
-    mem = psutil.virtual_memory()
-    return {
-        "total": mem.total,
-        "available": mem.available,
-        "percent": mem.percent
-    }
-
 def check_dependencies():
     """Vérifie si les dépendances nécessaires sont installées"""
     missing = []

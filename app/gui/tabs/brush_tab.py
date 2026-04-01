@@ -521,4 +521,4 @@ class BrushTab(QWidget):
                 )
                 self.restartRequested.emit()
             except Exception as e:
-                QMessageBox.critical(self, "Erreur", f"Erreur lors de la suppression de Brush: {e}")
+                QMessageBox.critical(self, tr("msg_error"), tr("err_brush_delete", str(e)))

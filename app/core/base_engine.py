@@ -162,8 +162,13 @@ class BaseEngine:
                 str(self.project_root),
                 str(Path.home())
             ]
+            if sys.platform == "darwin":
+                allowed_bases.extend(["/private/tmp", "/Volumes"])
+            elif sys.platform != "win32":
+                allowed_bases.append("/tmp")
             if not any(str(p).startswith(base) for base in allowed_bases):
                 self.log(f"SECURITY WARNING: Path access outside allowed boundaries: {p}")
+                return None
             return p
         except (TypeError, ValueError, OSError) as e:
             self.log(f"ERROR: Invalid path attempt : {path} ({e})")

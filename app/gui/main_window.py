@@ -31,6 +31,7 @@ class ColmapGUI(QMainWindow):
         self.worker = None
         self.brush_worker = None
         self.sharp_worker = None
+        self.fourdgs_worker = None
         
         # [AUDIT] SRP : Extraction de la gestion de session
         from app.gui.managers import SessionManager
@@ -259,7 +260,7 @@ class ColmapGUI(QMainWindow):
         """Arrête le processus en cours"""
         if (self.worker and self.worker.isRunning()) or \
            (self.sharp_worker and self.sharp_worker.isRunning()) or \
-           (hasattr(self, 'fourdgs_worker') and self.fourdgs_worker and self.fourdgs_worker.isRunning()):
+           (self.fourdgs_worker and self.fourdgs_worker.isRunning()):
             
             reply = QMessageBox.question(
                 self, tr("msg_warning"), tr("confirm_stop"),
@@ -270,7 +271,7 @@ class ColmapGUI(QMainWindow):
                 self.logs_tab.append_log(tr("msg_stopping"))
                 if self.worker and self.worker.isRunning(): self.worker.stop()
                 if self.sharp_worker and self.sharp_worker.isRunning(): self.sharp_worker.stop()
-                if hasattr(self, 'fourdgs_worker') and self.fourdgs_worker and self.fourdgs_worker.isRunning(): self.fourdgs_worker.stop()
+                if self.fourdgs_worker and self.fourdgs_worker.isRunning(): self.fourdgs_worker.stop()
         
     def on_finished(self, success, message):
         """Fin du traitement"""
@@ -287,9 +288,9 @@ class ColmapGUI(QMainWindow):
                 QMessageBox.information(self, tr("msg_success"), 
                                       f"{message}\n\n{tr('success_open_brush')}")
         else:
-            if "Arrete" not in message:
+            if self.worker and self.worker.is_running:
                 QMessageBox.warning(self, tr("msg_error"), f"{tr('msg_error')}:\n{message}")
-            
+
     def delete_dataset(self):
         """Supprime le contenu d'un dataset existant"""
         output_dir_str = self.config_tab.get_output_path()
@@ -329,7 +330,7 @@ class ColmapGUI(QMainWindow):
         else:
             reply = QMessageBox.question(
                 self, tr("msg_warning"),
-                f"Voulez-vous mettre a la corbeille le contenu du dossier :\n\n{target_path}",
+                tr("confirm_delete_dataset", str(target_path)),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             
@@ -340,9 +341,9 @@ class ColmapGUI(QMainWindow):
                     self.logs_tab.append_log(f"Dataset deleted: {target_path}")
                     QMessageBox.information(self, tr("msg_success"), msg)
                 else:
-                    QMessageBox.critical(self, tr("msg_error"), f"Erreur: {msg}")
+                    QMessageBox.critical(self, tr("msg_error"), tr("err_delete_failed", msg))
             except Exception as e:
-                QMessageBox.critical(self, tr("msg_error"), f"Impossible de supprimer le dataset:\n{str(e)}")
+                QMessageBox.critical(self, tr("msg_error"), tr("err_delete_exception", str(e)))
                 
     def train_brush(self, force_auto=False):
         """Lance l'entrainement Brush"""
@@ -353,12 +354,12 @@ class ColmapGUI(QMainWindow):
             input_path_str = brush_params.get("input_path")
             
             if not input_path_str:
-                 QMessageBox.critical(self, tr("msg_error"), "Veuillez selectionner un dossier Dataset valide.")
+                 QMessageBox.critical(self, tr("msg_error"), tr("err_invalid_dataset"))
                  return
-                 
+
             input_path = Path(input_path_str)
             if not input_path.exists():
-                 QMessageBox.critical(self, tr("msg_error"), "Veuillez selectionner un dossier Dataset valide.")
+                 QMessageBox.critical(self, tr("msg_error"), tr("err_invalid_dataset"))
                  return
 
             # Use custom output path if provided, otherwise default to input/checkpoints
@@ -375,19 +376,19 @@ class ColmapGUI(QMainWindow):
             project_name = self.config_tab.get_project_name()
             
             if not colmap_out_root_str:
-                 QMessageBox.critical(self, tr("msg_error"), "Le dossier de sortie racine n'existe pas.")
+                 QMessageBox.critical(self, tr("msg_error"), tr("err_output_not_exists"))
                  return
-            
+
             colmap_out_root = Path(colmap_out_root_str)
             if not colmap_out_root.exists():
-                 QMessageBox.critical(self, tr("msg_error"), "Le dossier de sortie racine n'existe pas.")
+                 QMessageBox.critical(self, tr("msg_error"), tr("err_output_not_exists"))
                  return
                  
             # Le dataset est dans root/project_name
             dataset_path = colmap_out_root / project_name
             
             if not dataset_path.exists():
-                QMessageBox.critical(self, tr("msg_error"), f"Le dossier du projet n'existe pas:\n{dataset_path}\nAvez-vous lancé la création du dataset ?")
+                QMessageBox.critical(self, tr("msg_error"), tr("err_project_not_exists", str(dataset_path)))
                 return
                 
             input_path = dataset_path
@@ -414,20 +415,20 @@ class ColmapGUI(QMainWindow):
         
     def stop_brush(self):
         """Arrête Brush"""
-        if hasattr(self, 'brush_worker') and self.brush_worker and self.brush_worker.isRunning():
+        if self.brush_worker and self.brush_worker.isRunning():
             self.brush_worker.stop()
-            self.logs_tab.append_log("Arrêt de Brush demandé...")
+            self.logs_tab.append_log(tr("msg_stop_requested"))
 
     def on_brush_finished(self, success, message):
         """Fin entrainement Brush"""
         self.brush_tab.set_processing_state(False)
-        self.logs_tab.append_log(f"Fin Brush: {message}")
+        self.logs_tab.append_log(f"{tr('msg_brush_complete', message)}" if message else "")
         
         if success:
-            QMessageBox.information(self, tr("msg_success"), f"Brush terminé!\n{message}")
+            QMessageBox.information(self, tr("msg_success"), tr("msg_brush_complete", message))
         else:
-            if "Arrete" not in message:
-                QMessageBox.warning(self, tr("msg_error"), f"Erreur Brush:\n{message}")
+            if self.brush_worker and self.brush_worker.is_running:
+                QMessageBox.warning(self, tr("msg_error"), tr("err_brush_detail", message))
 
 
 
@@ -438,22 +439,22 @@ class ColmapGUI(QMainWindow):
         output_path_str = params.get("output_path")
         
         if not input_path_str:
-             QMessageBox.critical(self, tr("msg_error"), "Veuillez selectionner un dossier d'images valide.")
+             QMessageBox.critical(self, tr("msg_error"), tr("err_invalid_images"))
              return
-             
+
         input_path = Path(input_path_str)
         if not input_path.exists():
-             QMessageBox.critical(self, tr("msg_error"), "Veuillez selectionner un dossier d'images valide.")
+             QMessageBox.critical(self, tr("msg_error"), tr("err_invalid_images"))
              return
              
         if not output_path_str:
-             QMessageBox.critical(self, tr("msg_error"), "Veuillez selectionner un dossier de sortie.")
+             QMessageBox.critical(self, tr("msg_error"), tr("err_no_output_folder"))
              return
         
         output_path = Path(output_path_str)
         
         self.sharp_tab.set_processing_state(True)
-        self.logs_tab.append_log(f"--- Lancement Apple ML Sharp ---")
+        self.logs_tab.append_log(tr("msg_sharp_launch"))
         self.logs_tab.append_log(f"Input: {input_path}")
         self.logs_tab.append_log(f"Output: {output_path}")
         
@@ -468,18 +469,18 @@ class ColmapGUI(QMainWindow):
         """Arrête Sharp"""
         if self.sharp_worker and self.sharp_worker.isRunning():
             self.sharp_worker.stop()
-            self.logs_tab.append_log("Arrêt de Sharp demandé...")
-            
+            self.logs_tab.append_log(tr("msg_stop_requested"))
+
     def on_sharp_finished(self, success, message):
         """Fin Sharp"""
         self.sharp_tab.set_processing_state(False)
         self.config_tab.set_processing_state(False)
-        self.logs_tab.append_log(f"Fin Sharp: {message}")
+        self.logs_tab.append_log(f"{tr('msg_sharp_complete', message)}" if message else "")
         
         if success:
-            QMessageBox.information(self, tr("msg_success"), f"Sharp terminé!\n{message}")
+            QMessageBox.information(self, tr("msg_success"), tr("msg_sharp_complete", message))
         else:
-            QMessageBox.warning(self, tr("msg_error"), f"Erreur Sharp:\n{message}")
+            QMessageBox.warning(self, tr("msg_error"), tr("err_sharp_detail", message))
 
     def restart_application(self):
         """Redémarre l'application de manière plus robuste (SRP)"""
@@ -489,13 +490,32 @@ class ColmapGUI(QMainWindow):
     def reset_factory(self, deep=False):
         """Supprime les venvs et relance l'installation/application (SRP)"""
         from app.gui.managers import AppLifecycle
-        AppLifecycle.reset_factory(deep)
+        AppLifecycle.reset_factory(deep, main_window=self)
 
     # --- Session Persistence Externalisée ---
     # Gérée par SessionManager
 
+    def _stop_all_workers(self):
+        """Stop all running workers. Called from closeEvent and reset_factory."""
+        import time
+        workers = [self.worker, self.brush_worker, self.sharp_worker, self.fourdgs_worker]
+
+        for w in workers:
+            if w and w.isRunning():
+                w.stop()
+
+        if hasattr(self, 'superplat_tab') and self.superplat_tab.is_running:
+            self.superplat_tab.stop_server()
+
+        deadline = time.time() + 3.0
+        for w in workers:
+            if w and w.isRunning():
+                remaining_ms = max(100, int((deadline - time.time()) * 1000))
+                w.wait(remaining_ms)
+
     def closeEvent(self, event):
         """Appelé à la fermeture de la fenêtre"""
+        self._stop_all_workers()
         self.session_manager.save(immediate=True)
         event.accept()
 

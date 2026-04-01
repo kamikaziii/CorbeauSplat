@@ -111,13 +111,17 @@ class AppLifecycle:
         if needs_setup and sys.platform != "win32":
             print("Reinstall detected: running setup before relaunch...")
             extra_argv = [a for a in sys.argv[1:] if a not in ("--gui",)]
-            main_args = " ".join(f'"{a}"' for a in extra_argv)
-            cmd = (
-                f'sleep 1 && '
-                f'"{python}" -m app.scripts.setup_dependencies --startup && '
-                f'"{python}" "{main_py}" {main_args}'
+            setup_cmd = [python, "-m", "app.scripts.setup_dependencies", "--startup"]
+            relaunch_cmd = [python, str(main_py)] + extra_argv
+            chain_script = (
+                "import subprocess, time; time.sleep(1); "
+                f"subprocess.run({setup_cmd!r}); "
+                f"subprocess.Popen({relaunch_cmd!r})"
             )
-            subprocess.Popen(cmd, shell=True, cwd=str(root_dir), start_new_session=True)
+            subprocess.Popen(
+                [python, "-c", chain_script],
+                cwd=str(root_dir), start_new_session=True
+            )
             QApplication.quit()
             sys.exit(0)
 
@@ -140,29 +144,38 @@ class AppLifecycle:
         sys.exit(0)
         
     @staticmethod
-    def reset_factory(deep=False):
-        QApplication.quit()
-        
+    def reset_factory(deep=False, main_window=None):
+        import shutil
+
+        if main_window:
+            main_window._stop_all_workers()
+
         root_dir = resolve_project_root()
         run_cmd = root_dir / "run.command"
-        
+
         to_delete = [
             root_dir / ".venv",
             root_dir / ".venv_sharp",
             root_dir / ".venv_360"
         ]
-        
+
         if deep:
             to_delete.append(root_dir / "engines")
             to_delete.append(root_dir / "config.json")
             for p in root_dir.glob("config.sync-conflict-*"):
                 to_delete.append(p)
-        
-        delete_cmd = " ".join([f'"{str(p)}"' for p in to_delete])
-        
+
         print(f"Reset Factory {'DEEP' if deep else 'LIGHT'} initie sur: {root_dir}")
-        print(f"Commande relance: {run_cmd}")
-        
-        cmd = f"sleep 2 && rm -rf {delete_cmd} && \"{run_cmd}\" &"
-        subprocess.Popen(cmd, shell=True, cwd=str(root_dir))
+
+        for p in to_delete:
+            if p.is_dir():
+                shutil.rmtree(str(p), ignore_errors=True)
+            elif p.is_file():
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+
+        subprocess.Popen(["bash", str(run_cmd)], start_new_session=True)
+        QApplication.quit()
         sys.exit(0)

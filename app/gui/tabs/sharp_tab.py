@@ -2,6 +2,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from app.core.i18n import tr, add_language_observer
 from app.gui.widgets.drop_line_edit import DropLineEdit
 from app.gui.widgets.dialog_utils import get_existing_directory, get_open_file_name
+from app.gui.base_worker import InstallWorker
 from app.scripts.setup_dependencies import install_sharp, uninstall_sharp
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QGroupBox,
@@ -194,45 +195,46 @@ class SharpTab(QWidget):
         self.btn_run.setEnabled(enabled)
 
     def install_sharp_module(self):
-        progress = QProgressDialog(tr("sharp_status_installing"), None, 0, 0, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
-        QApplication.processEvents()
-        
-        # Need engines dir
-        try:
-            success = install_sharp()
-            
-            if success:
-                QMessageBox.information(self, tr("msg_success"), tr("sharp_msg_install_ok"))
-                self.enable_controls(True)
-                self.check_status()
-            else:
-                 QMessageBox.critical(self, tr("msg_error"), tr("sharp_msg_install_err"))
-                 self.chk_activate.setChecked(False)
-                 self.enable_controls(False)
-        except Exception as e:
-            QMessageBox.critical(self, tr("msg_error"), f"Exception: {e}")
+        self.chk_activate.setEnabled(False)
+        self._progress = QProgressDialog(tr("sharp_status_installing"), None, 0, 0, self)
+        self._progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self._progress.show()
+
+        self._install_worker = InstallWorker(install_sharp, tr("sharp_msg_install_ok"))
+        self._install_worker.finished_signal.connect(self._on_install_finished)
+        self._install_worker.start()
+
+    def _on_install_finished(self, success, message):
+        self._progress.close()
+        self.chk_activate.setEnabled(True)
+        if success:
+            QMessageBox.information(self, tr("msg_success"), message)
+            self.enable_controls(True)
+            self.check_status()
+        else:
+            QMessageBox.critical(self, tr("msg_error"), message)
             self.chk_activate.setChecked(False)
-        finally:
-            progress.close()
+            self.enable_controls(False)
 
     def uninstall_sharp_module(self):
-        progress = QProgressDialog(tr("sharp_status_uninstalling"), None, 0, 0, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
-        QApplication.processEvents()
-        
-        try:
-            success = uninstall_sharp()
-            if success:
-                 QMessageBox.information(self, tr("msg_success"), tr("sharp_msg_uninstall_ok"))
-                 self.enable_controls(False)
-                 self.check_status()
-        except Exception as e:
-             QMessageBox.critical(self, "Erreur", f"Exception: {e}")
-        finally:
-            progress.close()
+        self.chk_activate.setEnabled(False)
+        self._progress = QProgressDialog(tr("sharp_status_uninstalling"), None, 0, 0, self)
+        self._progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self._progress.show()
+
+        self._uninstall_worker = InstallWorker(uninstall_sharp, tr("sharp_msg_uninstall_ok"))
+        self._uninstall_worker.finished_signal.connect(self._on_uninstall_finished)
+        self._uninstall_worker.start()
+
+    def _on_uninstall_finished(self, success, message):
+        self._progress.close()
+        self.chk_activate.setEnabled(True)
+        if success:
+            QMessageBox.information(self, tr("msg_success"), message)
+            self.enable_controls(False)
+            self.check_status()
+        else:
+            QMessageBox.critical(self, tr("msg_error"), message)
 
     def get_params(self):
         # We overload get_params from parent class actually? No, this is QWidget.

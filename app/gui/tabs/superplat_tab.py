@@ -121,7 +121,7 @@ class SuperSplatTab(QWidget):
         # 1. Start SuperSplat
         success, msg = self.engine.start_supersplat(self.splat_port.value())
         if not success:
-            QMessageBox.critical(self, tr("msg_error"), f"Erreur SuperSplat: {msg}")
+            QMessageBox.critical(self, tr("msg_error"), tr("err_superplat_server", msg))
             return
             
         # 2. Start Data Server (if path provided)
@@ -132,7 +132,7 @@ class SuperSplatTab(QWidget):
                 directory = path if path.is_dir() else path.parent
                 success_data, msg_data = self.engine.start_data_server(str(directory), self.data_port.value())
                 if not success_data:
-                    QMessageBox.warning(self, tr("msg_warning"), f"Erreur Serveur Données: {msg_data}")
+                    QMessageBox.warning(self, tr("msg_warning"), tr("err_data_server", msg_data))
                 else:
                     print(msg_data)
         

@@ -474,7 +474,7 @@ class SharpEngineDep(PipEngine):
 
 def load_config():
     """Loads config.json from project root/cwd"""
-    p = Path("config.json")
+    p = resolve_project_root() / "config.json"
     if p.exists():
         try: return json.loads(p.read_text())
         except: pass

@@ -2,8 +2,7 @@
 import sys
 import argparse
 import time
-import signal
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtWidgets import QApplication
 
 from app.core.i18n import tr
 from app.core.params import ColmapParams
@@ -13,10 +12,11 @@ from app.core.sharp_engine import SharpEngine
 from app.core.superplat_engine import SuperSplatEngine
 from app.core.system import check_dependencies
 from app.gui.main_window import ColmapGUI
+from app import VERSION
 
 def get_parser():
     """Configure and return the argument parser"""
-    parser = argparse.ArgumentParser(description=tr("cli_desc").replace("v0.8", "v0.9"))
+    parser = argparse.ArgumentParser(description=f"CorbeauSplat v{VERSION} - {tr('cli_desc')}")
     
     # GUI Mode
     parser.add_argument('--gui', action='store_true', help=tr("cli_gui_help"))
@@ -88,25 +88,21 @@ def run_brush(args):
     if not args.input or not args.output:
         print(tr("cli_err_brush_args"))
         sys.exit(1)
-        
+
     engine = BrushEngine()
     print(tr("cli_start_brush"))
     print(tr("cli_input", args.input))
     print(tr("cli_output", args.output))
-    
+
     params = {
         "total_steps": args.iterations,
         "sh_degree": args.sh_degree,
         "device": args.device
     }
-    
-    process = engine.train(args.input, args.output, params=params)
 
     try:
-        for line in process.stdout:
-            print(line, end="")
-        process.wait()
-        if process.returncode == 0:
+        returncode = engine.train(args.input, args.output, params=params)
+        if returncode == 0:
             print(tr("msg_success"))
         else:
             print(tr("msg_error"))
@@ -114,29 +110,26 @@ def run_brush(args):
     except KeyboardInterrupt:
         print(tr("cli_stopping"))
         engine.stop()
+        sys.exit(1)
 
 def run_sharp(args):
     """Exécution Prediction SHARP"""
     if not args.input or not args.output:
         print(tr("cli_err_sharp_args"))
         sys.exit(1)
-        
+
     engine = SharpEngine()
     print(tr("cli_start_sharp"))
-    
+
     params = {
         "checkpoint": args.checkpoint,
         "device": args.device if args.device != "auto" else "default",
         "verbose": True
     }
-    
-    process = engine.predict(args.input, args.output, params=params)
 
     try:
-        for line in process.stdout:
-            print(line, end="")
-        process.wait()
-        if process.returncode == 0:
+        returncode = engine.predict(args.input, args.output, params=params)
+        if returncode == 0:
             print(tr("msg_success"))
         else:
             print(tr("msg_error"))
@@ -144,6 +137,7 @@ def run_sharp(args):
     except KeyboardInterrupt:
         print(tr("cli_stopping"))
         engine.stop()
+        sys.exit(1)
 
 def run_supersplat(args):
     """Exécution Viewer SUPERSPLAT"""
@@ -178,8 +172,8 @@ def run_supersplat(args):
     
     # URL construction logic duplicated from Tab for convenience
     url = f"http://localhost:{args.port}?url=http://localhost:{args.data_port}/{filename}"
-    print(f"\nAccédez à : {url}\n")
-    print("Appuyez sur Ctrl+C pour arrêter les serveurs.")
+    print(f"\n{tr('cli_access_url', url)}\n")
+    print(tr("cli_ctrl_c_stop"))
     
     try:
         # Keep alive
@@ -198,8 +192,7 @@ def main():
     missing_deps = check_dependencies()
     
     if missing_deps:
-        msg = f"Attention: Dépendances manquantes: {', '.join(missing_deps)}\nCertaines fonctions peuvent échouer."
-        print(msg)
+        print(tr("cli_missing_deps", ', '.join(missing_deps)))
 
     # Dispatch logic
     if args.gui:

@@ -1,5 +1,6 @@
 
 from pathlib import Path
+import subprocess
 import sys
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QGroupBox,
@@ -9,6 +10,7 @@ from PyQt6.QtCore import Qt
 from app.core.i18n import tr, add_language_observer
 from app.gui.widgets.drop_line_edit import DropLineEdit
 from app.gui.widgets.dialog_utils import get_existing_directory
+from app.gui.base_worker import InstallWorker
 from app.gui.workers import FourDGSWorker
 
 class FourDGSTab(QWidget):
@@ -122,8 +124,8 @@ class FourDGSTab(QWidget):
             import shutil
             if not shutil.which("ns-process-data"):
                 reply = QMessageBox.question(
-                    self, 
-                    "Installation Requise", 
+                    self,
+                    tr("install_required"),
                     tr("msg_install_nerf"),
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
                 )
@@ -140,34 +142,37 @@ class FourDGSTab(QWidget):
             self.btn_run.setEnabled(False)
 
     def install_dependencies(self):
-        # Install nerfstudio pip package
-        progress = QProgressDialog("Installation de Nerfstudio...", "Annuler", 0, 0, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
-        QApplication.processEvents()
-        
-        try:
-            # We use subprocess to call pip
-            # Make sure we use the current python executable
-            cmd = [sys.executable, "-m", "pip", "install", "nerfstudio"]
-            subprocess.check_call(cmd)
-            
-            QMessageBox.information(self, tr("msg_success"), "Installation terminée. Veuillez redémarrer l'application.")
+        self.chk_activate.setEnabled(False)
+        self._progress = QProgressDialog(tr("four_dgs_installing"), None, 0, 0, self)
+        self._progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self._progress.show()
+
+        cmd = [sys.executable, "-m", "pip", "install", "nerfstudio"]
+        self._install_worker = InstallWorker(
+            lambda: subprocess.check_call(cmd),
+            tr("four_dgs_install_done")
+        )
+        self._install_worker.finished_signal.connect(self._on_install_finished)
+        self._install_worker.start()
+
+    def _on_install_finished(self, success, message):
+        self._progress.close()
+        self.chk_activate.setEnabled(True)
+        if success:
+            QMessageBox.information(self, tr("msg_success"), message)
             self.controls_group.setEnabled(True)
             self.btn_run.setEnabled(True)
-        except Exception as e:
-            QMessageBox.critical(self, tr("msg_error"), f"Erreur installation: {e}")
+        else:
+            QMessageBox.critical(self, tr("msg_error"), message)
             self.chk_activate.setChecked(False)
-        finally:
-            progress.close()
 
     def browse_input(self):
-        d = get_existing_directory(self, "Choisir dossier Vidéos")
+        d = get_existing_directory(self, tr("four_dgs_dlg_input"))
         if d:
             self.input_edit.setText(d)
 
     def browse_output(self):
-        d = get_existing_directory(self, "Choisir destination")
+        d = get_existing_directory(self, tr("four_dgs_dlg_output"))
         if d:
             self.output_edit.setText(d)
 
@@ -176,11 +181,11 @@ class FourDGSTab(QWidget):
         dst = self.output_edit.text().strip()
         
         if not src or not dst:
-            QMessageBox.warning(self, tr("msg_warning"), "Veuillez sélectionner les dossiers source et destination.")
+            QMessageBox.warning(self, tr("msg_warning"), tr("err_no_src_dst"))
             return
 
         if not Path(src).exists():
-             QMessageBox.warning(self, tr("msg_warning"), "Le dossier source n'existe pas.")
+             QMessageBox.warning(self, tr("msg_warning"), tr("err_src_not_exists"))
              return
              
         self.btn_run.setEnabled(False)
@@ -195,11 +200,11 @@ class FourDGSTab(QWidget):
     def run_colmap_only(self):
         dst = self.output_edit.text().strip()
         if not dst:
-            QMessageBox.warning(self, tr("msg_warning"), "Veuillez sélectionner un dossier destination.")
+            QMessageBox.warning(self, tr("msg_warning"), tr("err_no_dst"))
             return
             
         if not Path(dst).exists():
-             QMessageBox.warning(self, tr("msg_warning"), "Le dossier destination n'existe pas.")
+             QMessageBox.warning(self, tr("msg_warning"), tr("err_dst_not_exists"))
              return
              
         self.btn_run.setEnabled(False)
@@ -220,7 +225,7 @@ class FourDGSTab(QWidget):
         if self.worker:
             self.worker.stop()
             self.btn_stop.setEnabled(False)
-            self.append_log(">>> Arrêt demandé...")
+            self.append_log(tr("msg_stop_requested"))
 
     def on_process_finished(self, success, message):
         self.btn_run.setEnabled(True)
@@ -229,7 +234,7 @@ class FourDGSTab(QWidget):
         if success:
             QMessageBox.information(self, tr("msg_success"), message)
         else:
-             if "Arrêté" not in message:
+            if self.worker and self.worker.is_running:
                 QMessageBox.critical(self, tr("msg_error"), message)
         self.worker = None
 

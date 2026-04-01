@@ -51,7 +51,7 @@ class LanguageManager:
                 with open(config_file, "r") as f:
                     config = json.load(f)
                     self.current_lang = config.get("language", "fr")
-        except:
+        except (json.JSONDecodeError, OSError, KeyError):
             pass
             
     def save_config(self):
@@ -66,7 +66,7 @@ class LanguageManager:
             
             with open(config_file, "w") as f:
                 json.dump(config, f, indent=2)
-        except:
+        except (json.JSONDecodeError, OSError, TypeError):
             pass
 
     def set_language(self, lang_code):
@@ -84,7 +84,7 @@ class LanguageManager:
         if args:
             try:
                 text = text.format(*args)
-            except:
+            except (IndexError, KeyError, ValueError):
                 pass
         return text
 

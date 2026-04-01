@@ -50,7 +50,8 @@ class Extractor360Worker(BaseWorker):
             try:
                 part = line.split("[")[1].split("%]")[0].strip()
                 self.progress_signal.emit(int(part))
-            except: pass
+            except (ValueError, IndexError):
+                pass
 
 class ColmapWorker(BaseWorker):
     """Thread worker pour exécuter COLMAP via le moteur"""

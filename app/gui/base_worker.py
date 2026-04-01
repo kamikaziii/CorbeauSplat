@@ -1,6 +1,7 @@
 from PyQt6.QtCore import QThread, pyqtSignal
 import subprocess
 import os
+from app.core.i18n import tr
 
 class BaseWorker(QThread):
     """Classe de base pour les workers avec signaux standardisés"""
@@ -22,7 +23,7 @@ class BaseWorker(QThread):
                 self.process.terminate()
                 # On ne fait pas wait() ici car on veut que l'interface reste réactive
                 # Le thread se terminera de lui-même quand run() s'arrêtera
-            except:
+            except Exception:
                 pass
         self.requestInterruption()
         
@@ -34,7 +35,7 @@ class BaseWorker(QThread):
             if env:
                 actual_env.update(env)
             
-            self.log_signal.emit(f"Exécution commande: {' '.join(cmd)}")
+            self.log_signal.emit(tr("msg_exec_cmd", ' '.join(cmd)))
             
             self.process = subprocess.Popen(
                 cmd,
@@ -50,7 +51,7 @@ class BaseWorker(QThread):
             
             for line in self.process.stdout:
                 if not self.is_running or self.isInterruptionRequested():
-                    self.log_signal.emit("Processus arrêté par l'utilisateur.")
+                    self.log_signal.emit(tr("msg_user_stopped"))
                     self.process.terminate()
                     break
                 
@@ -59,13 +60,34 @@ class BaseWorker(QThread):
                     self.log_signal.emit(f"{log_prefix}{clean_line}")
                     self.parse_line(clean_line)
                     
-            self.process.wait()
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
             return self.process.returncode == 0
         except Exception as e:
-            self.log_signal.emit(f"Erreur CRITIQUE lors du lancement du processus : {e}")
+            self.log_signal.emit(tr("err_critical_process", str(e)))
             import traceback
             self.log_signal.emit(traceback.format_exc())
             return False
 
     def parse_line(self, line):
         """A surcharger pour extraire la progression ou des infos spécifiques"""
+
+
+class InstallWorker(QThread):
+    """Generic worker for blocking install/uninstall/download operations."""
+    finished_signal = pyqtSignal(bool, str)
+
+    def __init__(self, fn, success_msg="", parent=None):
+        super().__init__(parent)
+        self._fn = fn
+        self._success_msg = success_msg
+
+    def run(self):
+        try:
+            result = self._fn()
+            self.finished_signal.emit(result is not False, self._success_msg)
+        except Exception as e:
+            self.finished_signal.emit(False, str(e))
